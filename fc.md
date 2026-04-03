@@ -1,0 +1,129 @@
+# 系统流程图
+
+```mermaid
+graph TB
+    %% 总体方向向下，局部区块横向排布，方便大屏与PPT分块截图展示
+    classDef ui_layer fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#000
+    classDef event_layer fill:#e3f2fd,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef facade_layer fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef core_layer fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef global_func fill:#fffde7,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef crypto_layer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef storage fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#000
+
+    %% ---> 重要：使用不可见连线强制主模块居中垂直排布，防止向左疯狂溢出 <---
+    GUI_File ~~~ Core_Class_Facade
+    Core_Class_Facade ~~~ Core_Class_Mgr
+    Core_Class_Mgr ~~~ Core_Global
+    Core_Global ~~~ Crypto_Lib
+    Crypto_Lib ~~~ Storage
+
+    %% ==========================================
+    %% 模块1. 表现展示层 (适合PPT第一页单独提取)
+    %% ==========================================
+    subgraph GUI_File["🎨 图形界面层 (InfoSecurWork_GUI.py)"]
+        direction TB
+        App["<b>💻 RSAApp (前端控制中心)</b><br/>━━━━━━━━━━━━━<br/>• 继承 tk.Tk 根窗口类并初始化尺寸<br/>• 实例化后端 RSAService 服务代理<br/>• 管理所有的界面状态变量 (StringVar)"]:::ui_layer
+
+        subgraph UI_Build["🖼️ UI 组件结构与排版模块 (Layouts)"]
+            direction TB
+            bl["<b>_build_layout()</b><br/>搭建 Notebook<br/>分配三大选项卡"]:::ui_layer
+            bk["<b>_build_key_tab()</b><br/>密钥生成/载入<br/>下拉框排版"]:::ui_layer
+            bt["<b>_build_text_tab()</b><br/>短文加解密区块<br/>分左右两侧文本框"]:::ui_layer
+            bf["<b>_build_file_tab()</b><br/>大文件加解密区块<br/>含路径选择输入框"]:::ui_layer
+        end
+
+        subgraph UI_Event["🖱️ 用户界面交互层 (Event Handlers)"]
+            direction TB
+            ek["<b>[事件1] 密钥体系操作响应</b><br/>generate_keys / load_* / save_*<br/><i>捕获用户点击，将路径或长度请求传递给后端服务生</i>"]:::event_layer
+            et["<b>[事件2] 纯文本操作转换响应</b><br/>encrypt_text / decrypt_text / clear<br/><i>取出明文输入框内容，转为 Base64 传递，并写回结果框</i>"]:::event_layer
+            ef["<b>[事件3] 动态文件路由响应</b><br/>select_* / encrypt_file / decrypt_file<br/><i>唤起操作系统的文件选取面板，合法性校验后下达指令</i>"]:::event_layer
+            ea["<b>[事件4] 状态心跳与 UI 刷新</b><br/>update_key_info / refresh_key_summary<br/><i>拉取管家处最新状态向最右侧的长日志框进行文字刷新</i>"]:::event_layer
+        end
+
+        App -->|"启动与装配"| UI_Build
+        UI_Build -. "点击 command 绑定" .-> UI_Event
+    end
+
+    %% ==========================================
+    %% 模块2. 门面控制层 (防腐代理设计模式演示)
+    %% ==========================================
+    subgraph Core_Class_Facade["⚙️ 业务代理防腐层 (rsa_core.py)"]
+        direction TB
+        RSASrv["<b>🌟 RSAService (服务架构总管家)</b><br/>━━━━━━━━━━━━━<br/>• <b>屏蔽复杂度</b>：向 GUI 层暴露简单 API，不传公钥私钥等专业加密对象<br/>• <b>集中代理</b>：一人统一掌管『密钥管家』和『文件处理引擎』两员大将<br/>• <b>格式衔接</b>：在此层级自动消化 Base64 编码解码及普通字符串的中转"]:::facade_layer
+    end
+
+    UI_Event == "通过服务生代理间接干活" ==> RSASrv
+
+    %% ==========================================
+    %% 模块3. 核心大将层 (高内聚引擎)
+    %% ==========================================
+    subgraph Core_Class_Mgr["🧠 核心业务守护与调度层 (rsa_core.py)"]
+        direction TB
+        KeyMgr["<b>🛡️ RSAKeyManager (左护法长：密钥管家)</b><br/>━━━━━━━━━━━━━<br/>• <b>状态保存</b>：负责在内存里保管 private_key, public_key, peer<br/>• <b>安全校验</b>：专门依靠 require_xxx() 阻断无钥非法调用<br/>• <b>微服务</b>：专职负责自身范围内的【短字符串】与【会话秘钥】加解密"]:::core_layer
+
+        FileCph["<b>🛠️ RSAFileCipher (右护法长：流文件引擎)</b><br/>━━━━━━━━━━━━━<br/>• <b>依赖注入</b>：必须被喂食注入 KeyMgr 的实例才能正式上班跑起来<br/>• <b>密钥路由选择</b>：判断本次大文件是加密给自己，还是用朋友公钥加密<br/>• <b>任务分派</b>：将判定好的对口密钥安全移交给底层的【死循环文件流引擎】"]:::core_layer
+    end
+
+    RSASrv == "派活给左侧管家去存拿钥匙" ==> KeyMgr
+    RSASrv == "派活给右侧引擎去扛起重文件" ==> FileCph
+    FileCph -. "向左管家强行借用对口钥匙" .-> KeyMgr
+
+    %% ==========================================
+    %% 模块4. 底层无状态函数层 (适合讲算法边界)
+    %% ==========================================
+    subgraph Core_Global["🧮 底层无状态算法群 (rsa_core.py 顶部全局函数)"]
+        direction TB
+
+        subgraph CF_Const["🏷️ 硬性配置与运算算子 (Constants)"]
+            direction TB
+            CC["<b>文件边界与默认容量</b><br/>FILE_MAGIC: 'RSAFILE1'<br/>DEFAULT_KEY_SIZE: 1024"]:::global_func
+            CM["<b>容量承载极限计算</b><br/>max_encrypt_block_size()<br/><i>公式：密钥字节 - 2*Hash - 2</i>"]:::global_func
+        end
+
+        subgraph CF_KeyIO["🔑 底层密钥组装与文件投递"]
+            direction TB
+            CG["<b>generate_rsa_key_pair()</b><br/>委托计算机素数对碰撞生成"]:::global_func
+            CS["<b>serialize / load_* 转换家族</b><br/>Python RSA对象 ↔ PEM 磁盘文本"]:::global_func
+        end
+
+        subgraph CF_ByteFile["📦 绝对纯粹的核心加解密引擎运转室"]
+            direction TB
+            CB["<b>encrypt_bytes / decrypt_bytes</b><br/>利用 range() 步长特性对内存数据切片循环"]:::global_func
+            CFx["<b>encrypt_file / decrypt_file (文件防爆流处理)</b><br/>1. 构筑并提取附带源文件名的 JSON Metadata 头部<br/>2. <b>死循环 (while True)</b> 源文件切分成块 (Chunk)<br/>3. 小勺抽水式读取，循环加密至出口目标池，防止 OOM 内存爆炸"]:::global_func
+        end
+    end
+
+    KeyMgr -- "指令下发至密钥构建工" --> CF_KeyIO
+    KeyMgr -- "指令下发至游离解密室" --> CB
+    FileCph -- "指令下发至文件流处理流水线" --> CFx
+
+    CF_ByteFile -. "获取当前切片所受限制" .-> CM
+    CF_ByteFile -. "封装标记检验专用包头" .-> CC
+
+    %% ==========================================
+    %% 模块5. 密码学支撑池 (第三方库)
+    %% ==========================================
+    subgraph Crypto_Lib["🔒 开源密码学基建库 (cryptography.hazmat)"]
+        direction TB
+        CL_Pad["<b>padding.OAEP / MGF1</b><br/>基于 SHA256 提供不可伪造的强随机填充底座"]:::crypto_layer
+        CL_Rsa["<b>rsa 类簇</b><br/>负责产生原始密钥数学位并直接提供 .encrypt 底层接口"]:::crypto_layer
+        CL_Ser["<b>serialization</b><br/>实现国际通用的密码学 PEM / PKCS8 / x509 序列化转换"]:::crypto_layer
+    end
+
+    CF_KeyIO --> CL_Rsa & CL_Ser
+    CF_ByteFile --> CL_Rsa
+    CF_ByteFile --> CL_Pad
+
+    %% ==========================================
+    %% 模块6. 物理环境 I/O
+    %% ==========================================
+    subgraph Storage["💾 操作系统文件持久化落盘层 (Windows/Linux IO)"]
+        direction TB
+        Disk_Key[/"<b>📜 特有非对称数字签章文件 (.pem)</b><br/>存储人类能直接用记事本复制的私钥/公钥字符"/]:::storage
+        Disk_File[/"<b>📦 安全加固的密文包裹仓 (.rsa 等)</b><br/>经过头部写入封装和逐片切块编码产生的目标二进制舱"/]:::storage
+    end
+
+    CF_KeyIO <--> |"即时单次 IO 全量读写"| Disk_Key
+    CFx <--> |"with open 环境长链路循环取件吞吐"| Disk_File
+```
