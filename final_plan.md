@@ -1,5 +1,7 @@
 # 端到端加密即时通讯课设最终执行清单
 
+<!-- markdownlint-disable MD047 -->
+
 ## 1. 底线检查结论
 
 本清单以 NECESSARY_REQUIREMENT.md 为硬性标准，对当前的 Project_Plan_and_Requirements.md 做了一次“保底达标”检查。
@@ -510,6 +512,7 @@ InfoSecurityProj/
 - [ ] 实验结果说明已准备。
 - [ ] 压缩包命名符合“第X组+题目”。
 - [ ] 若是小组作业，由组长提交。
+<!-- markdownlint-disable-next-line MD034 -->
 - [ ] 邮件地址为 xiongf@bjtu.edu.cn。
 
 ### 任务 S：团队分工材料
