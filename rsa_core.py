@@ -25,6 +25,20 @@ METADATA_LENGTH_BYTES = 4
 OAEP_HASH = hashes.SHA256()
 
 
+def get_public_key_fingerprint(public_key: rsa.RSAPublicKey) -> str:
+	"""
+	计算公钥的 SHA-256 指纹（取前 16 个十六进制字符）。
+	用于在界面上简短地标识一把公钥，方便用户确认对方身份。
+	"""
+	pub_bytes = public_key.public_bytes(
+		encoding=serialization.Encoding.DER,
+		format=serialization.PublicFormat.SubjectPublicKeyInfo,
+	)
+	digest = hashes.Hash(hashes.SHA256())
+	digest.update(pub_bytes)
+	return digest.finalize().hex()[:16]
+
+
 def generate_rsa_key_pair(key_size: int = DEFAULT_KEY_SIZE) -> tuple[rsa.RSAPrivateKey, rsa.RSAPublicKey]:
 	"""
 	生成一对新的 RSA 密钥对（包含私钥和公钥）。
@@ -311,6 +325,16 @@ class RSAKeyManager:
 	def clear_peer_public_key(self) -> None:
 		"""干掉对方留存的公钥记录（比如和朋友吵架了不再联系...）"""
 		self.peer_public_key = None
+
+	def get_local_public_key_fingerprint(self) -> str:
+		"""获取本地公钥的 SHA-256 短指纹，用于界面展示和身份确认。"""
+		return get_public_key_fingerprint(self.require_public_key())
+
+	def get_peer_public_key_fingerprint(self) -> str | None:
+		"""获取对方公钥的指纹。如果尚未导入对方公钥则返回 None。"""
+		if self.peer_public_key is None:
+			return None
+		return get_public_key_fingerprint(self.peer_public_key)
 
 	def encrypt_text(self, plaintext: str, public_key: rsa.RSAPublicKey | None = None) -> bytes:
 		"""

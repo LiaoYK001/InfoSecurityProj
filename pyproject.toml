@@ -1,0 +1,9 @@
+[project]
+name = "infosecurityproj"
+version = "0.1.0"
+description = "基于 RSA + AES-GCM 混合加密的即时通讯系统"
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=43.0.0",
+    "websockets>=14.0",
+]
