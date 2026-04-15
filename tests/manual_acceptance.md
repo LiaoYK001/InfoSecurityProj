@@ -20,6 +20,7 @@ python desktop_chat_gui.py
 ```
 
 操作：
+
 1. 点击「生成密钥」。
 2. 在用户 ID 输入 `alice`。
 3. 点击「连接」。
@@ -35,11 +36,13 @@ python desktop_chat_gui.py
 ```
 
 操作：
+
 1. 点击「生成密钥」。
 2. 在用户 ID 输入 `bob`。
 3. 点击「连接」。
 
 预期：
+
 - 两个客户端的在线用户列表中均能看到对方。
 - Crypto Console 显示自动导入对方公钥的日志。
 
