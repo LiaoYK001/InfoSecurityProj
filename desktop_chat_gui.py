@@ -305,26 +305,26 @@ class DesktopChatApp(tk.Tk):
         """根据事件类型分发处理。"""
         evt_type = event.get("event", "")
 
-        if evt_type == "connected":
+        if evt_type == chat_client.EVT_CONNECTED:
             self._status_var.set(f"已连接 (用户: {self._uid_var.get().strip()})")
             self._append_crypto_log("[连接] 已成功连接到服务端。")
 
-        elif evt_type == "disconnected":
+        elif evt_type == chat_client.EVT_DISCONNECTED:
             self._status_var.set("已断开")
             self._btn_connect.config(state=tk.NORMAL)
             self._btn_disconnect.config(state=tk.DISABLED)
             self._append_crypto_log("[连接] 与服务端的连接已断开。")
 
-        elif evt_type == "user_list":
+        elif evt_type == chat_client.EVT_USER_LIST:
             self._handle_user_list(event)
 
-        elif evt_type == "chat_message":
+        elif evt_type == chat_client.EVT_CHAT_MESSAGE:
             self._handle_incoming_chat(event)
 
-        elif evt_type == "public_key":
+        elif evt_type == chat_client.EVT_PUBLIC_KEY:
             self._handle_incoming_public_key(event)
 
-        elif evt_type == "error":
+        elif evt_type == chat_client.EVT_ERROR:
             err = event.get("message", "未知错误")
             self._append_crypto_log(f"[错误] {err}")
 

@@ -10,6 +10,15 @@
   - tkinter 主线程永远不会被网络 I/O 阻塞。
   - 后台线程永远不会直接操作 tkinter 组件。
   - 两者之间仅通过 queue.Queue 进行通信。
+
+事件类型常量：
+  EVT_CONNECTED      连接已建立并完成注册
+  EVT_DISCONNECTED   连接已断开（含主动断开和异常断开）
+  EVT_CHAT_MESSAGE   收到聊天密文消息
+  EVT_PUBLIC_KEY     收到对方公钥
+  EVT_USER_LIST      收到在线用户列表更新
+  EVT_ACK            收到确认回执
+  EVT_ERROR          错误通知
 """
 
 from __future__ import annotations
@@ -27,6 +36,35 @@ import chat_protocol
 
 logger = logging.getLogger("ChatClient")
 
+# -------------------- 客户端事件类型常量 --------------------
+
+EVT_CONNECTED = "connected"
+"""连接已建立并注册成功。"""
+
+EVT_DISCONNECTED = "disconnected"
+"""连接已断开。"""
+
+EVT_CHAT_MESSAGE = "chat_message"
+"""收到聊天密文消息。事件字典额外包含 "data" 键。"""
+
+EVT_PUBLIC_KEY = "public_key"
+"""收到对方公钥。事件字典额外包含 "data" 键。"""
+
+EVT_USER_LIST = "user_list"
+"""收到在线用户列表更新。事件字典额外包含 "data" 键。"""
+
+EVT_ACK = "ack"
+"""收到确认回执。事件字典额外包含 "data" 键。"""
+
+EVT_ERROR = "error"
+"""错误通知。事件字典额外包含 "message" 键。"""
+
+# 心跳发送间隔（秒）
+HEARTBEAT_INTERVAL = 30
+
+# 事件队列最大长度，防止内存泄漏
+_MAX_EVENT_QUEUE_SIZE = 1000
+
 
 class ChatClient:
     """
@@ -40,16 +78,17 @@ class ChatClient:
       - poll_event()       从事件队列取出一个事件
 
     事件结构（由 poll_event 返回的字典）：
-      - {"event": "connected"}
-      - {"event": "disconnected"}
-      - {"event": "chat_message", "data": {...}}
-      - {"event": "public_key", "data": {...}}
-      - {"event": "user_list", "data": {...}}
-      - {"event": "error", "message": "..."}
+      - {"event": EVT_CONNECTED}
+      - {"event": EVT_DISCONNECTED, "reason": "..."}
+      - {"event": EVT_CHAT_MESSAGE, "data": {...}}
+      - {"event": EVT_PUBLIC_KEY, "data": {...}}
+      - {"event": EVT_USER_LIST, "data": {...}}
+      - {"event": EVT_ACK, "data": {...}}
+      - {"event": EVT_ERROR, "message": "..."}
     """
 
     def __init__(self) -> None:
-        self._event_queue: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._event_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=_MAX_EVENT_QUEUE_SIZE)
         self._send_queue: queue.Queue[str] = queue.Queue()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -114,6 +153,12 @@ class ChatClient:
         raw = chat_protocol.make_public_key_message(self._user_id, receiver_id, public_key_pem)
         self._enqueue_send(raw)
 
+    def send_heartbeat(self) -> None:
+        """手动发送一次心跳包（通常由自动心跳任务处理，无需手动调用）。"""
+        if self._connected and self._user_id:
+            raw = chat_protocol.make_heartbeat_message(self._user_id)
+            self._enqueue_send(raw)
+
     def poll_event(self, timeout: float = 0.0) -> dict[str, Any] | None:
         """
         从事件队列中取出一个事件。GUI 应在 tkinter after() 回调中周期性调用。
@@ -138,32 +183,33 @@ class ChatClient:
             )
         except Exception as e:
             logger.error("网络线程异常: %s", e)
-            self._put_event({"event": "error", "message": str(e)})
+            self._put_event({"event": EVT_ERROR, "message": str(e)})
         finally:
             self._connected = False
             self._loop.close()
             self._loop = None
 
     async def _async_main(self, server_url: str, user_id: str, public_key_pem: str) -> None:
-        """异步主函数：连接、注册、然后并发收发消息。"""
+        """异步主函数：连接、注册、然后并发收发消息和心跳。"""
         try:
             async with websockets.connect(server_url) as ws:
                 self._ws = ws
                 self._connected = True
-                self._put_event({"event": "connected"})
+                self._put_event({"event": EVT_CONNECTED})
 
                 # 发送注册消息
                 register_msg = chat_protocol.make_register_message(user_id, public_key_pem)
                 await ws.send(register_msg)
                 logger.info("已注册: %s", user_id)
 
-                # 并发运行：接收消息 + 发送队列消息
+                # 并发运行：接收消息 + 发送队列消息 + 心跳
                 recv_task = asyncio.ensure_future(self._recv_loop(ws))
                 send_task = asyncio.ensure_future(self._send_loop(ws))
+                heartbeat_task = asyncio.ensure_future(self._heartbeat_loop(ws))
 
                 # 等待任一任务结束（通常是 recv_loop 因连接关闭而结束）
                 done, pending = await asyncio.wait(
-                    [recv_task, send_task],
+                    [recv_task, send_task, heartbeat_task],
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 for task in pending:
@@ -171,11 +217,11 @@ class ChatClient:
 
         except Exception as e:
             logger.error("连接失败: %s", e)
-            self._put_event({"event": "error", "message": f"连接失败: {e}"})
+            self._put_event({"event": EVT_ERROR, "message": f"连接失败: {e}"})
         finally:
             self._connected = False
             self._ws = None
-            self._put_event({"event": "disconnected"})
+            self._put_event({"event": EVT_DISCONNECTED, "reason": "连接已关闭"})
 
     async def _recv_loop(self, ws: Any) -> None:
         """持续接收服务端消息并写入事件队列。"""
@@ -191,17 +237,17 @@ class ChatClient:
 
                 msg_type = msg["type"]
                 if msg_type == chat_protocol.MSG_CHAT_MESSAGE:
-                    self._put_event({"event": "chat_message", "data": msg})
+                    self._put_event({"event": EVT_CHAT_MESSAGE, "data": msg})
                 elif msg_type == chat_protocol.MSG_PUBLIC_KEY:
-                    self._put_event({"event": "public_key", "data": msg})
+                    self._put_event({"event": EVT_PUBLIC_KEY, "data": msg})
                 elif msg_type == chat_protocol.MSG_USER_LIST:
-                    self._put_event({"event": "user_list", "data": msg})
+                    self._put_event({"event": EVT_USER_LIST, "data": msg})
                 elif msg_type == chat_protocol.MSG_ERROR:
                     payload = msg.get("payload", {})
                     err_msg = payload["message"] if isinstance(payload, dict) and "message" in payload else "未知错误"
-                    self._put_event({"event": "error", "message": str(err_msg)})
+                    self._put_event({"event": EVT_ERROR, "message": str(err_msg)})
                 elif msg_type == chat_protocol.MSG_ACK:
-                    self._put_event({"event": "ack", "data": msg})
+                    self._put_event({"event": EVT_ACK, "data": msg})
                 # heartbeat 不产生事件
         except websockets.exceptions.ConnectionClosed:
             logger.info("接收循环结束：连接已关闭。")
@@ -220,6 +266,19 @@ class ChatClient:
             except websockets.exceptions.ConnectionClosed:
                 break
 
+    async def _heartbeat_loop(self, ws: Any) -> None:
+        """定期向服务端发送心跳包，保持连接活跃。"""
+        while not self._stop_event.is_set():
+            await asyncio.sleep(HEARTBEAT_INTERVAL)
+            if self._stop_event.is_set():
+                break
+            try:
+                hb = chat_protocol.make_heartbeat_message(self._user_id)
+                await ws.send(hb)
+                logger.debug("心跳已发送")
+            except websockets.exceptions.ConnectionClosed:
+                break
+
     async def _close_ws(self) -> None:
         """安全关闭 WebSocket 连接。"""
         if self._ws:
@@ -233,10 +292,21 @@ class ChatClient:
     def _enqueue_send(self, raw_message: str) -> None:
         """将待发送消息放入发送队列。"""
         if not self._connected:
-            self._put_event({"event": "error", "message": "尚未连接到服务端。"})
+            self._put_event({"event": EVT_ERROR, "message": "尚未连接到服务端。"})
             return
         self._send_queue.put(raw_message)
 
     def _put_event(self, event: dict[str, Any]) -> None:
-        """向事件队列写入事件（线程安全）。"""
-        self._event_queue.put(event)
+        """向事件队列写入事件（线程安全）。队列满时丢弃最旧事件。"""
+        try:
+            self._event_queue.put_nowait(event)
+        except queue.Full:
+            # 丢弃最旧事件，腾出空间
+            try:
+                self._event_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._event_queue.put_nowait(event)
+            except queue.Full:
+                pass
