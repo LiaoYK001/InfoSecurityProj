@@ -66,6 +66,9 @@ def encrypt_chat_message(
         "debug": {
             "plaintext_length": len(plaintext),
             "ciphertext_length": len(aes_result["ciphertext"]),
+            "wrapped_key_length": len(wrapped_key_b64),
+            "nonce_length": len(aes_result["nonce"]),
+            "session_key_bits": 256,
             "peer_key_fingerprint": peer_fp,
             "sender_key_fingerprint": sender_fp,
         },
@@ -111,5 +114,7 @@ def decrypt_chat_message(
         "debug": {
             "plaintext_length": len(plaintext),
             "ciphertext_length": len(ciphertext_b64),
+            "wrapped_key_length": len(wrapped_key_b64),
+            "nonce_length": len(nonce_b64),
         },
     }

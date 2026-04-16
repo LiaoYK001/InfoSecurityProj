@@ -12,6 +12,24 @@
 设计目的：
   - 将协议格式与业务逻辑解耦，所有网络层只需调用本模块即可构造 / 解析消息。
   - 服务端只看 type / sender_id / receiver_id 做路由，不解析 payload 内容，确保盲转发。
+
+各消息类型 payload 结构说明：
+  register:
+      {"public_key": str}          — 客户端公钥 PEM。
+  public_key:
+      {"public_key": str}          — 发送方公钥 PEM。
+  chat_message:
+      {"wrapped_key": str, "nonce": str, "ciphertext": str, ...}
+                                    — 混合加密密文。
+  ack:
+      {"ack_for": str}             — 被确认的消息类型或标识。
+  error:
+      {"message": str}             — 错误描述。
+  heartbeat:
+      {}                           — 空载荷。
+  user_list:
+      {"users": {uid: public_key_pem, ...}}
+                                    — 在线用户及其公钥。
 """
 
 from __future__ import annotations
@@ -47,6 +65,22 @@ MSG_USER_LIST = "user_list"
 VALID_TYPES = {
     MSG_REGISTER, MSG_PUBLIC_KEY, MSG_CHAT_MESSAGE,
     MSG_ACK, MSG_ERROR, MSG_HEARTBEAT, MSG_USER_LIST,
+}
+
+# 各消息类型在 payload 中必须包含的字段
+_PAYLOAD_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    MSG_REGISTER:     ("public_key",),
+    MSG_PUBLIC_KEY:   ("public_key",),
+    MSG_CHAT_MESSAGE: ("wrapped_key", "nonce", "ciphertext"),
+    MSG_ACK:          ("ack_for",),
+    MSG_ERROR:        ("message",),
+    MSG_HEARTBEAT:    (),
+    MSG_USER_LIST:    ("users",),
+}
+
+# 必须提供非空 receiver_id 的消息类型
+_REQUIRES_RECEIVER: set[str] = {
+    MSG_PUBLIC_KEY, MSG_CHAT_MESSAGE, MSG_ACK,
 }
 
 
@@ -138,7 +172,7 @@ def make_user_list_message(users: dict[str, str]) -> str:
 
 # -------------------- 消息解析 --------------------
 
-def parse_message(raw_message: str) -> dict[str, object]:
+def parse_message(raw_message: str, *, strict_payload: bool = True) -> dict[str, object]:
     """
     将接收到的 JSON 字符串解析为消息字典。
 
@@ -146,8 +180,13 @@ def parse_message(raw_message: str) -> dict[str, object]:
       - 必须是合法 JSON。
       - 必须包含 type / sender_id / payload 字段。
       - type 必须在 VALID_TYPES 中。
+      - payload 必须是 dict。
+      - 当 strict_payload=True 时，payload 必须包含该消息类型所要求的必要字段。
+      - 需要 receiver_id 的消息类型（public_key / chat_message / ack），
+        receiver_id 不能为空。
 
     :param raw_message: 原始 JSON 字符串。
+    :param strict_payload: 是否校验 payload 必要字段，默认 True。
     :return: 解析后的消息字典。
     :raises ValueError: JSON 非法或缺少必要字段时抛出。
     """
@@ -163,11 +202,28 @@ def parse_message(raw_message: str) -> dict[str, object]:
         if field not in msg:
             raise ValueError(f"消息缺少必要字段: {field}")
 
-    if msg["type"] not in VALID_TYPES:
-        raise ValueError(f"未知消息类型: {msg['type']}")
+    msg_type = msg["type"]
+    if msg_type not in VALID_TYPES:
+        raise ValueError(f"未知消息类型: {msg_type}")
 
     # 补全可选字段默认值
     msg.setdefault("receiver_id", "")
     msg.setdefault("timestamp", "")
+
+    # payload 必须是 dict
+    payload = msg["payload"]
+    if not isinstance(payload, dict):
+        raise ValueError("payload 必须是 JSON 对象。")
+
+    # 需要 receiver_id 的消息类型不能为空
+    if msg_type in _REQUIRES_RECEIVER and not msg.get("receiver_id"):
+        raise ValueError(f"消息类型 {msg_type} 需要提供 receiver_id。")
+
+    # 校验 payload 必要字段
+    if strict_payload:
+        required = _PAYLOAD_REQUIRED_FIELDS.get(msg_type, ())
+        for field in required:
+            if field not in payload:
+                raise ValueError(f"消息类型 {msg_type} 的 payload 缺少字段: {field}")
 
     return msg
