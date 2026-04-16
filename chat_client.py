@@ -197,7 +197,8 @@ class ChatClient:
                 elif msg_type == chat_protocol.MSG_USER_LIST:
                     self._put_event({"event": "user_list", "data": msg})
                 elif msg_type == chat_protocol.MSG_ERROR:
-                    err_msg = msg.get("payload", {}).get("message", "未知错误")
+                    payload = msg.get("payload", {})
+                    err_msg = payload["message"] if isinstance(payload, dict) and "message" in payload else "未知错误"
                     self._put_event({"event": "error", "message": str(err_msg)})
                 elif msg_type == chat_protocol.MSG_ACK:
                     self._put_event({"event": "ack", "data": msg})

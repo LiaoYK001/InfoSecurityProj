@@ -266,7 +266,8 @@ class DesktopChatApp(tk.Tk):
             # 加密
             self._append_crypto_log(f"[加密] 原文: \"{plaintext}\" (长度 {len(plaintext)})")
             encrypted = self._session.encrypt_for_peer(self._current_peer, plaintext)
-            debug = encrypted.get("debug", {})
+            debug_raw = encrypted.get("debug", {})
+            debug = debug_raw if isinstance(debug_raw, dict) else {}
             self._append_crypto_log(f"[加密] AES 会话密钥已生成")
             self._append_crypto_log(f"[加密] wrapped_key 已生成 (对方指纹: {debug.get('peer_key_fingerprint', '?')})")
             self._append_crypto_log(f"[加密] 密文长度: {debug.get('ciphertext_length', '?')}")
@@ -360,8 +361,9 @@ class DesktopChatApp(tk.Tk):
 
         try:
             result = self._session.decrypt_from_message(payload)
-            plaintext = result["plaintext"]
-            debug = result.get("debug", {})
+            plaintext = str(result["plaintext"])
+            debug_raw = result.get("debug", {})
+            debug = debug_raw if isinstance(debug_raw, dict) else {}
             self._append_crypto_log(f"[解密] 解密成功，明文长度: {debug.get('plaintext_length', '?')}")
 
             # 如果当前正在和这个发送方聊天，直接显示

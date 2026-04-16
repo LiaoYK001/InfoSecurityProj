@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
 # -------------------- 消息类型常量 --------------------
@@ -56,7 +57,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _build(msg_type: str, sender_id: str, receiver_id: str, payload: dict) -> str:
+def _build(msg_type: str, sender_id: str, receiver_id: str, payload: Mapping[str, object]) -> str:
     """
     内部通用消息构造器。
     将各字段打包为 JSON 字符串，确保输出格式统一。
@@ -91,7 +92,7 @@ def make_public_key_message(sender_id: str, receiver_id: str, public_key_pem: st
     return _build(MSG_PUBLIC_KEY, sender_id, receiver_id, {"public_key": public_key_pem})
 
 
-def make_chat_message(sender_id: str, receiver_id: str, payload: dict[str, object]) -> str:
+def make_chat_message(sender_id: str, receiver_id: str, payload: Mapping[str, object]) -> str:
     """
     构造聊天密文消息。
 

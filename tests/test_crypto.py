@@ -162,14 +162,18 @@ class TestMessageCrypto(unittest.TestCase):
             self.bob_km.require_public_key(),
             self.alice_km,
         )
-        self.assertIn("peer_key_fingerprint", enc["debug"])
-        self.assertIn("sender_key_fingerprint", enc["debug"])
+        enc_debug = enc["debug"]
+        assert isinstance(enc_debug, dict)
+        self.assertIn("peer_key_fingerprint", enc_debug)
+        self.assertIn("sender_key_fingerprint", enc_debug)
 
         dec = message_crypto.decrypt_chat_message(
             enc,
             self.bob_km.require_private_key(),
         )
-        self.assertEqual(dec["debug"]["plaintext_length"], len(plaintext))
+        dec_debug = dec["debug"]
+        assert isinstance(dec_debug, dict)
+        self.assertEqual(dec_debug["plaintext_length"], len(plaintext))
 
     def test_long_message(self):
         """长消息应正常加解密（AES-GCM 无长度限制）。"""
