@@ -1,3 +1,15 @@
+"""RSA 非对称加密核心模块。
+
+本模块提供 RSA 密钥对生成、OAEP 填充加解密、分块加密、密钥序列化/反序列化
+以及公钥指纹计算等功能。在即时通讯系统中，RSA 用于安全传输一次性 AES 会话密钥，
+是混合加密方案（RSA-OAEP + AES-GCM）的非对称加密部分。
+
+主要组件：
+    - 顶层函数：generate_rsa_key_pair, encrypt_bytes, decrypt_bytes 等
+    - RSAKeyManager：密钥对管理类，供新版聊天系统使用
+    - RSAFileCipher：文件级加解密类
+    - RSAService：为旧版 GUI (InfoSecurWork_GUI.py) 提供的门面类
+"""
 from __future__ import annotations
 
 import base64
@@ -444,27 +456,35 @@ class RSAService:
 		return self.key_manager.has_peer_public_key()
 
 	def get_key_summary(self) -> str:
+		"""获取当前密钥状态摘要信息。"""
 		return self.key_manager.get_key_summary()
 
 	def save_public_key(self, file_path: str) -> None:
+		"""将公钥保存到指定文件路径（PEM 格式）。"""
 		self.key_manager.save_public_key(file_path)
 
 	def save_private_key(self, file_path: str) -> None:
+		"""将私钥保存到指定文件路径（PEM 格式，无密码保护）。"""
 		self.key_manager.save_private_key(file_path)
 
 	def load_public_key(self, file_path: str) -> None:
+		"""从文件加载公钥。"""
 		self.key_manager.load_public_key(file_path)
 
 	def load_private_key(self, file_path: str) -> None:
+		"""从文件加载私钥，并自动派生公钥。"""
 		self.key_manager.load_private_key(file_path)
 
 	def export_public_key_string(self) -> str:
+		"""将公钥导出为 PEM 格式字符串。"""
 		return self.key_manager.export_public_key_string()
 
 	def import_peer_public_key_from_string(self, public_key_pem: str) -> None:
+		"""从 PEM 字符串导入对端公钥。"""
 		self.key_manager.import_peer_public_key_from_string(public_key_pem)
 
 	def import_peer_public_key_from_file(self, file_path: str) -> None:
+		"""从文件导入对端公钥。"""
 		self.key_manager.import_peer_public_key_from_file(file_path)
 
 	def encrypt_text_to_base64(self, plaintext: str) -> str:
@@ -484,7 +504,9 @@ class RSAService:
 		return self.file_cipher.decrypt_file(input_path, output_path)
 
 	def encrypt_session_key_for_peer_base64(self, session_key: bytes) -> str:
+		"""使用对端公钥加密 AES 会话密钥，返回 Base64 编码。"""
 		return self.key_manager.encrypt_session_key_for_peer_base64(session_key)
 
 	def decrypt_session_key_from_peer_base64(self, encrypted_session_key_base64: str) -> bytes:
+		"""使用本地私钥解密对端发来的 AES 会话密钥。"""
 		return self.key_manager.decrypt_session_key_from_peer_base64(encrypted_session_key_base64)
