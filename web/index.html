@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureChat — 端到端加密聊天 (Web)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── 顶栏 ──────────────────────────────────────────── -->
+<div id="top-bar">
+    <h1>🔒 SecureChat Web</h1>
+    <span id="connection-status" class="disconnected">未连接</span>
+</div>
+
+<!-- ── 主体 ──────────────────────────────────────────── -->
+<div id="app-container">
+
+    <!-- 左侧面板 -->
+    <div id="sidebar">
+        <!-- 连接区 -->
+        <div class="sidebar-section">
+            <h3>连接</h3>
+            <div class="input-group">
+                <label for="server-url">服务器地址</label>
+                <input type="text" id="server-url" value="ws://127.0.0.1:8765" placeholder="ws://host:port">
+            </div>
+            <div class="input-group">
+                <label for="user-id">用户 ID</label>
+                <input type="text" id="user-id" placeholder="输入你的用户名">
+            </div>
+            <div class="btn-row">
+                <button id="btn-connect" class="btn btn-primary">连接</button>
+                <button id="btn-disconnect" class="btn btn-danger" disabled>断开</button>
+            </div>
+        </div>
+
+        <!-- 密钥区 -->
+        <div class="sidebar-section">
+            <h3>密钥管理</h3>
+            <button id="btn-generate-keys" class="btn btn-success">生成 RSA-2048 密钥对</button>
+            <div id="key-info"></div>
+        </div>
+
+        <!-- 联系人列表 -->
+        <div class="sidebar-section" style="flex:1; display:flex; flex-direction:column; overflow:hidden; padding-bottom:0;">
+            <h3>在线联系人</h3>
+            <div id="contacts-list">
+                <div class="empty-state" style="height:auto; padding:20px 0;">
+                    <span style="font-size:12px;">尚无在线联系人</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 中间：聊天区 -->
+    <div id="chat-panel">
+        <div id="chat-header">选择一个联系人开始聊天</div>
+        <div id="chat-messages">
+            <div class="empty-state">
+                <div class="icon">💬</div>
+                <div>选择联系人后即可开始端到端加密聊天</div>
+            </div>
+        </div>
+        <div id="chat-input-area">
+            <input type="text" id="msg-input" placeholder="输入消息..." disabled>
+            <button id="btn-send" class="btn btn-primary" style="width:auto;" disabled>发送</button>
+        </div>
+    </div>
+
+    <!-- 右侧：Crypto Console -->
+    <div id="crypto-panel">
+        <h3>🔐 Crypto Console</h3>
+        <div id="crypto-console">
+            <div class="empty-state" style="font-size:12px;">
+                <div>加解密日志将在此显示</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

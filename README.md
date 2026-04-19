@@ -1,6 +1,6 @@
 # 端到端加密即时通讯系统
 
-基于 RSA-OAEP + AES-GCM 混合加密的桌面即时通讯系统，课程设计项目。
+基于 RSA-OAEP + AES-GCM 混合加密的即时通讯系统，支持桌面端和 Web 端跨平台互通。课程设计项目。
 
 ## 项目简介
 
@@ -9,6 +9,7 @@
 - **混合加密**：RSA-OAEP(SHA-256) 交换一次性 AES-256 会话密钥，AES-GCM 加密消息正文
 - **盲转发服务端**：中继服务器只转发密文，不解密任何 payload，服务端日志不含明文
 - **桌面 GUI 客户端**：Tkinter 界面，含联系人列表、聊天区、Crypto Console 实时加解密日志
+- **Web 客户端**：浏览器端原生 HTML/CSS/JS，使用 Web Crypto API，与桌面端完全互通
 - **自动密钥交换**：选择联系人时自动交换公钥，无需手动操作
 - **指纹验证**：显示本地和对端公钥 SHA-256 指纹，支持带外核验
 
@@ -26,6 +27,12 @@
 ├── InfoSecurWork_GUI.py    # 旧版 RSA 单机加解密工具（历史保留）
 ├── requirements.txt        # pip 依赖清单
 ├── pyproject.toml          # uv 项目配置
+├── web/                    # Web 客户端（浏览器端）
+│   ├── index.html          # 主页面
+│   ├── style.css           # 深色主题样式
+│   ├── app.js              # 主应用逻辑
+│   ├── crypto.js           # Web Crypto API 加密模块
+│   └── protocol.js         # 消息协议
 ├── tests/                  # 自动化测试 + 人工验收手册
 └── document/               # 课程文档与验收记录
 ```
@@ -96,6 +103,21 @@ GUI 操作步骤：
 4. Crypto Console 面板实时显示加解密过程
 
 > 完整的双客户端演示步骤参见 `tests/manual_acceptance.md`。
+
+### 5. 启动 Web 客户端（可选）
+
+在服务端已运行的前提下，打开另一个终端：
+
+```bash
+cd web
+python -m http.server 8080
+```
+
+然后在浏览器中访问 `http://localhost:8080`。操作步骤与桌面端一致：生成密钥 → 输入用户名 → 连接 → 选择联系人 → 发送消息。
+
+Web 端可与桌面端互通：桌面端用户和 Web 端用户之间可以正常收发加密消息。
+
+> 详细说明参见 `web/README.md`。
 
 ## 打包为可执行文件
 

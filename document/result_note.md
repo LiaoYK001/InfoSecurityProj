@@ -74,7 +74,47 @@ python -m unittest discover -s tests -v
 | `dist/SecureChat.exe`       | `pyinstaller --onefile --windowed --name SecureChat desktop_chat_gui.py` | 双击可启动 GUI |
 | `dist/SecureChatServer.exe` | `pyinstaller --onefile --console --name SecureChatServer chat_server.py` | 控制台可运行   |
 
-## 8. 结论
+## 8. Web 端跨平台互通测试
+
+### 8.1 测试环境
+
+Web 端使用浏览器原生 HTML/CSS/JS + Web Crypto API，无需任何前端框架。
+
+启动方式：
+
+```bash
+cd web
+python -m http.server 8080
+# 浏览器访问 http://localhost:8080
+```
+
+### 8.2 Web↔Web 互通
+
+| 测试场景            | 结果    | 说明                                                    |
+| ------------------- | ------- | ------------------------------------------------------- |
+| WebUser1 → WebUser2 | ✅ 通过 | 加密消息正确发送和解密，Crypto Console 日志完整         |
+| WebUser2 → WebUser1 | ✅ 通过 | 双向通信正常，加密参数一致                              |
+| 双方 Crypto Console | ✅ 一致 | wrapped_key=344 chars, nonce=16 chars, AES-GCM 解密成功 |
+
+### 8.3 加密参数验证
+
+Web 端与桌面端使用完全一致的加密参数：
+
+| 参数         | Web 端 (Web Crypto API) | 桌面端 (Python cryptography) |
+| ------------ | ----------------------- | ---------------------------- |
+| RSA 算法     | RSA-OAEP, SHA-256       | RSA-OAEP, SHA-256            |
+| RSA 密钥长度 | 2048 bit                | 2048 bit                     |
+| AES 算法     | AES-GCM, 256-bit        | AES-GCM, 256-bit             |
+| Nonce 长度   | 12 bytes                | 12 bytes                     |
+| Auth Tag     | 128-bit                 | 128-bit                      |
+| 公钥格式     | SPKI PEM                | SPKI PEM                     |
+| Base64 编码  | 标准 Base64             | 标准 Base64                  |
+
+### 8.4 服务端兼容性
+
+服务端未做任何修改。由于服务端采用盲转发模式，只读取消息信封中的 `type`、`sender_id`、`receiver_id` 字段，不解析 payload 内容，因此 Web 端和桌面端的消息可以被服务端透明转发。
+
+## 9. 结论
 
 本系统成功实现了端到端加密即时通讯的核心功能：
 
@@ -82,3 +122,4 @@ python -m unittest discover -s tests -v
 - 服务端作为盲转发节点，无法获取聊天内容
 - 每条消息使用独立的一次性 AES-256 会话密钥
 - 自动化测试和人工验收均验证通过
+- Web 端与桌面端使用相同加密参数，可跨平台互通
