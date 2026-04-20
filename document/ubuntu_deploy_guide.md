@@ -11,6 +11,7 @@
 7. [教室多端演示操作流程](#7-教室多端演示操作流程)
 8. [常见问题排查](#8-常见问题排查)
 9. [一键快速部署脚本](#9-一键快速部署脚本)
+10. [方案 B：Nginx Proxy Manager 外部网关部署](#10-方案-b-nginx-proxy-manager-外部网关部署)
 
 ---
 
@@ -629,6 +630,233 @@ echo "提示: 浏览器首次访问时需要接受自签名证书警告"
 cd ~/SecureChat
 chmod +x deploy.sh
 ./deploy.sh
+```
+
+---
+
+## 10. 方案 B：Nginx Proxy Manager 外部网关部署
+
+> **适用场景**：Ubuntu 服务器只跑 HTTP 服务，另有一台网关服务器已安装 [Nginx Proxy Manager (NPM)](https://nginxproxymanager.com/)，由 NPM 统一做 HTTPS 终止和反向代理。
+>
+> 此方案 **不需要在 Ubuntu 上安装 nginx**，也不需要自签名证书。
+
+### 10.0 架构示意
+
+```
+┌──────────┐    HTTPS/WSS     ┌──────────────────────┐    HTTP     ┌──────────────────────────┐
+│  浏览器   │ ◄──────────────► │  网关服务器            │ ◄────────► │  Ubuntu 服务器             │
+│          │   port 443       │  Nginx Proxy Manager  │            │                           │
+│          │                  │  (SSL 终止 + 路由)     │  :8080 ──► │  python -m http.server    │
+│          │                  │                        │  :8765 ──► │  chat_server.py (WS)      │
+└──────────┘                  └──────────────────────┘            └──────────────────────────┘
+```
+
+### 10.1 Ubuntu 端：启动两个服务
+
+需要启动 **两个进程**：
+
+| 服务                     | 端口 | 作用                               |
+| ------------------------ | ---- | ---------------------------------- |
+| `chat_server.py`         | 8765 | WebSocket 中继转发（盲转发）       |
+| `python3 -m http.server` | 8080 | 提供 Web UI 静态文件 (HTML/CSS/JS) |
+
+#### 快速启动（tmux 方式，推荐演示用）
+
+```bash
+# SSH 登录 Ubuntu 后
+cd ~/SecureChat
+source .venv/bin/activate
+
+# 启动 tmux（退出 SSH 后服务不会断）
+tmux new -s securechat
+
+# ── 窗格 1：WebSocket 服务端 ──
+python3 chat_server.py --host 0.0.0.0 --port 8765
+
+# 按 Ctrl+B 再按 % 分出第二个窗格
+
+# ── 窗格 2：Web 静态文件服务 ──
+cd ~/SecureChat/web
+python3 -m http.server 8080 --bind 0.0.0.0
+```
+
+> **tmux 常用操作**：
+>
+> - 分离会话（退出 SSH 仍运行）：`Ctrl+B` 然后 `D`
+> - 重新连接：`tmux attach -t securechat`
+> - 切换窗格：`Ctrl+B` 然后方向键
+
+#### 生产方式（systemd 服务，长期运行推荐）
+
+**服务 1：WebSocket 中继服务端**
+
+```bash
+sudo tee /etc/systemd/system/securechat.service > /dev/null <<EOF
+[Unit]
+Description=SecureChat WebSocket Relay Server
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=$HOME/SecureChat
+ExecStart=$HOME/SecureChat/.venv/bin/python3 chat_server.py --host 0.0.0.0 --port 8765
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+**服务 2：Web 静态文件服务器**
+
+```bash
+sudo tee /etc/systemd/system/securechat-web.service > /dev/null <<EOF
+[Unit]
+Description=SecureChat Web UI Static File Server
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=$HOME/SecureChat/web
+ExecStart=$HOME/SecureChat/.venv/bin/python3 -m http.server 8080 --bind 0.0.0.0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+**启用并启动**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable securechat securechat-web
+sudo systemctl start securechat securechat-web
+
+# 验证
+sudo systemctl status securechat securechat-web
+```
+
+### 10.2 Ubuntu 端：防火墙放行
+
+```bash
+sudo ufw allow 8080/tcp   # Web UI
+sudo ufw allow 8765/tcp   # WebSocket
+sudo ufw status
+```
+
+> 如果是云服务器，还需在云控制台安全组中放行 8080 和 8765。
+
+### 10.3 验证 Ubuntu 端服务
+
+```bash
+# 验证 Web UI 可访问
+curl -s http://127.0.0.1:8080/ | head -3
+# 应看到: <!DOCTYPE html> ...
+
+# 验证 WebSocket 端口在监听
+ss -tlnp | grep -E '8080|8765'
+# 应看到两行 LISTEN
+```
+
+### 10.4 Nginx Proxy Manager 配置
+
+在 NPM Web 管理界面中操作：
+
+#### 步骤 1：添加 Proxy Host
+
+1. 登录 NPM 管理面板 → **Hosts** → **Proxy Hosts** → **Add Proxy Host**
+
+2. **Details 选项卡**：
+
+   | 字段                  | 值                                          |
+   | --------------------- | ------------------------------------------- |
+   | Domain Names          | `chat.yourdomain.com`（你的域名/子域名）    |
+   | Scheme                | `http`                                      |
+   | Forward Hostname / IP | Ubuntu 服务器的内网 IP（如 `192.168.1.50`） |
+   | Forward Port          | `8080`                                      |
+   | ✅ Websocket Support  | **开启**                                    |
+
+3. **SSL 选项卡**：
+
+   | 字段              | 值                                               |
+   | ----------------- | ------------------------------------------------ |
+   | SSL Certificate   | 选择已有证书或 **Request a new SSL Certificate** |
+   | ✅ Force SSL      | 开启                                             |
+   | ✅ HTTP/2 Support | 开启                                             |
+
+4. 点击 **Save** — 此时 `https://chat.yourdomain.com/` 应该能打开 Web UI 页面。
+
+#### 步骤 2：添加 WebSocket 自定义路径
+
+1. 编辑刚创建的 Proxy Host → **Custom Locations** 选项卡
+
+2. 点击 **Add Location**：
+
+   | 字段                  | 值                                          |
+   | --------------------- | ------------------------------------------- |
+   | Location              | `/ws`                                       |
+   | Scheme                | `http`                                      |
+   | Forward Hostname / IP | Ubuntu 服务器的内网 IP（如 `192.168.1.50`） |
+   | Forward Port          | `8765`                                      |
+
+3. 点击该 Location 右侧的 **⚙️ 齿轮图标**，在 **Custom Nginx Configuration** 中粘贴：
+
+   ```nginx
+   proxy_set_header Upgrade $http_upgrade;
+   proxy_set_header Connection "upgrade";
+   proxy_http_version 1.1;
+   proxy_read_timeout 86400;
+   proxy_send_timeout 86400;
+   ```
+
+4. 点击 **Save**。
+
+#### 步骤 3：验证
+
+浏览器访问 `https://chat.yourdomain.com/`：
+
+- Web UI 页面正常加载 ✅
+- 服务器地址输入框自动填充为 `wss://chat.yourdomain.com/ws` ✅（app.js 会自动检测）
+- 输入用户名 → 点击连接 → 状态变为"已连接" ✅
+
+> **原理**：`web/app.js` 中的 `autoDetectServerUrl()` 函数会自动检测：当通过非 localhost 的 HTTPS 访问时，自动将 WebSocket 地址设为 `wss://{当前域名}/ws`。无需手动填写。
+
+### 10.5 完整操作速查
+
+```bash
+# ===== Ubuntu 端（SSH 登录后执行） =====
+
+# 方式一：tmux 快速启动
+cd ~/SecureChat && source .venv/bin/activate
+tmux new -s securechat
+python3 chat_server.py --host 0.0.0.0 --port 8765
+# Ctrl+B, % 分屏
+cd ~/SecureChat/web && python3 -m http.server 8080 --bind 0.0.0.0
+# Ctrl+B, D 分离
+
+# 方式二：systemd（如已配置）
+sudo systemctl start securechat securechat-web
+
+# 检查状态
+ss -tlnp | grep -E '8080|8765'
+```
+
+```
+===== NPM 端 =====
+Proxy Host:
+  Domain:   chat.yourdomain.com
+  Forward:  http://<Ubuntu-IP>:8080
+  WebSocket Support: ✅
+  SSL: ✅ Force SSL
+
+Custom Location:
+  /ws → http://<Ubuntu-IP>:8765
+  + WebSocket upgrade headers
 ```
 
 ---
