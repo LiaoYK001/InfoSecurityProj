@@ -474,6 +474,16 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ── 远程部署自动检测 WebSocket 地址 ─────────────────────
+
+(function autoDetectServerUrl() {
+    const h = location.hostname;
+    if (h && h !== "127.0.0.1" && h !== "localhost") {
+        const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+        dom.serverUrl.value = `${wsProto}//${location.host}/ws`;
+    }
+})();
+
 // ── 页面卸载时断开连接 ───────────────────────────────────
 
 window.addEventListener("beforeunload", () => {

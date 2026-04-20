@@ -86,6 +86,60 @@
 - `document/screenshots/` 目录下至少有 8 张实际截图。
 - 截图按 `README.md` 中的编号命名（如 `01_client_startup.png`）。
 
+#### 人工操作流程
+
+**A-1. 桌面端截图（编号 01-09）**
+
+```
+1. 打开终端，启动服务端：
+   python chat_server.py
+   → 截图 01_server_start.png（显示 "服务端启动: ws://127.0.0.1:8765"）
+
+2. 双击 dist/SecureChat.exe 或执行 python desktop_chat_gui.py 启动客户端 A
+   → 截图 02_alice_keygen.png（密钥生成后，显示指纹）
+
+3. 输入用户名 Alice，点击"连接"
+   → 截图 03_alice_connected.png（状态栏显示"已连接"）
+
+4. 再启动一个客户端 B，用户名 Bob，连接服务端
+   → 截图 04_bob_contact_list.png（联系人列表显示 Alice）
+
+5. Alice 端：选择 Bob → 输入消息 → 发送
+   → 截图 05_alice_send_msg.png（消息气泡显示发送的消息）
+   → 截图 06_alice_crypto_log.png（Crypto Console 显示加密日志）
+
+6. Bob 端：选择 Alice → 查看收到的消息
+   → 截图 07_bob_recv_msg.png（消息气泡显示接收的解密消息）
+   → 截图 08_bob_crypto_log.png（Crypto Console 显示解密日志）
+
+7. 切回服务端终端
+   → 截图 09_server_log_noclear.png（日志只有 type/sender/receiver/payload_len，无明文）
+```
+
+**A-2. Wireshark 截图（编号 10-11）**
+
+```
+1. 打开 Wireshark → 选择本地回环接口（Loopback / lo / Npcap Loopback）
+2. 过滤条件输入：tcp.port == 8765
+3. 在桌面端客户端发送一条消息
+4. Wireshark 中找到包含数据的 TCP 帧
+   → 截图 10_wireshark_list.png（捕获列表概览）
+5. 点击该帧，展开 payload
+   → 截图 11_wireshark_payload.png（显示 wrapped_key / nonce / ciphertext 等 Base64 密文字段）
+6. 确认 payload 中搜索不到聊天明文
+```
+
+**A-3. Web 端截图**
+
+```
+1. 确保服务端仍在运行
+2. 打开终端，在项目根目录执行：python -m http.server 8080 --directory web
+3. 打开浏览器 Tab 1：http://localhost:8080 → 用户名 WebAlice → 生成密钥 → 连接
+4. 打开浏览器 Tab 2：http://localhost:8080 → 用户名 WebBob → 生成密钥 → 连接
+5. WebAlice 选择 WebBob，发送消息；WebBob 选择 WebAlice 查看并回复
+   → 截图保存为 12_web_chat.png
+```
+
 ### 任务 B：完成最终报告
 
 目标：将 `document/final_report.md` 的内容整理为正式的最终报告文档。
@@ -102,6 +156,53 @@
 
 - 报告文档可独立阅读，不依赖仓库中的其他文件。
 - 报告中的截图清晰可辨，标注完整。
+
+#### 人工操作流程
+
+**方法一：使用 Pandoc 转换（推荐）**
+
+```
+1. 安装 Pandoc：
+   - Windows: 下载 https://pandoc.org/installing.html 安装
+   - 或: winget install --id JohnMacFarlane.Pandoc
+
+2. 转换为 Word：
+   cd document
+   pandoc final_report.md -o final_report.docx --toc
+
+3. 用 Word 打开 final_report.docx：
+   - 插入 screenshots/ 目录下的截图到对应章节
+   - 调整格式（字体：宋体/Times New Roman，字号：小四）
+   - 添加封面页（课程名、题目、姓名、学号、日期）
+   - 另存为 PDF 备份
+```
+
+**方法二：在 Word 中直接编写**
+
+```
+1. 打开 Word → 新建空白文档
+2. 参照 document/report_outline.md 的章节结构逐章粘贴
+3. 从 document/final_report.md 中复制文本内容
+4. 插入截图，添加图注（如"图 5-1 Alice 端加密日志"）
+5. 保存为 .docx，同时导出 PDF
+```
+
+**报告中 Web 端亮点内容模板**（可直接写入"结果分析"章节）：
+
+```
+5.X Web 端自我拓展
+
+本项目在完成桌面端功能后，自主拓展实现了 Web 浏览器客户端，
+采用原生 HTML/CSS/JavaScript + Web Crypto API，无需任何前端框架。
+
+Web 端与桌面端使用完全一致的加密参数：
+- RSA-2048 OAEP (SHA-256, MGF1-SHA-256)
+- AES-256-GCM (12 字节 nonce, 128 位 tag)
+- 公钥格式: SPKI PEM
+- 编码: 标准 Base64
+
+两端可通过同一中继服务端无缝互通，验证了"一套协议、多端互操作"的设计目标。
+```
 
 ### 任务 C：更新提交包
 
@@ -123,6 +224,52 @@
 - 解压后可直接按 `README.md` 安装依赖、运行测试、启动程序。
 - 压缩包大小合理（≤ 50 MB）。
 
+#### 人工操作流程
+
+**使用 PowerShell 打包（Windows）：**
+
+```powershell
+# 进入项目上级目录
+cd C:\Users\czl1\Desktop\Project
+
+# 创建打包目录（排除不必要文件）
+$dest = "第X组+端到端加密即时通讯软件设计与实现"
+if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+New-Item -ItemType Directory -Path $dest
+
+# 复制需要的文件（排除 .git, __pycache__, .vscode, node_modules）
+robocopy InfoSecurityProj $dest /E /XD .git __pycache__ .vscode .mypy_cache .pytest_cache others Assistance /XF *.pyc
+
+# 将最终报告 Word/PDF 也复制进去（如果不在 document/ 里）
+# Copy-Item "path/to/final_report.docx" "$dest/document/"
+
+# 压缩
+Compress-Archive -Path $dest -DestinationPath "$dest.zip" -Force
+
+# 检查大小
+(Get-Item "$dest.zip").Length / 1MB
+# 应 ≤ 50 MB
+
+# 验证：解压到临时目录测试
+Expand-Archive "$dest.zip" -DestinationPath "verify_temp" -Force
+# 检查 verify_temp/ 下的文件结构是否完整
+```
+
+**打包前检查清单：**
+
+```
+□ .git/ 目录未包含
+□ __pycache__/ 目录未包含
+□ .vscode/ 目录未包含
+□ dist/SecureChat.exe 已包含
+□ dist/SecureChatServer.exe 已包含
+□ web/ 目录完整（5个文件 + README.md）
+□ document/final_report.docx 或 .pdf 已包含
+□ 所有 .py 源文件已包含
+□ requirements.txt 已包含
+□ README.md 已包含
+```
+
 ### 任务 D：逐条勾选提交检查单
 
 目标：按 `document/submission_checklist.md` 逐条检查并勾选。
@@ -142,6 +289,27 @@
 - `document/submission_checklist.md` 所有条目已勾选为 `[x]`。
 - 任何未勾选的条目都已记录原因或已解决。
 
+#### 当前勾选状态
+
+已自动确认通过的条目（2026-04-20 机器验证）：
+
+- ✅ 一、程序源码检查 — **全部通过**（8 个核心文件均有 docstring，requirements.txt / pyproject.toml / README.md 完整）
+- ✅ 二、可运行程序检查 — **全部通过**（dist/ 下 exe 文件存在）
+- ✅ 三、自动化测试检查 — **全部通过**（57/57 tests OK）
+- ✅ 四、文档材料检查 — **全部通过**（6 个文档文件均存在）
+- 🔶 五、最终报告检查 — **部分通过**，待人工操作：插入截图到报告、导出 Word/PDF
+- 🔶 六、演示准备检查 — **部分通过**，待人工操作：通读汇报脚本、Wireshark 抓包
+- 🔶 七、打包提交检查 — **待人工操作**：确认组号、打包、发送邮件
+
+#### 剩余人工操作
+
+```
+1. 完成任务 A（截图采集）后 → 回到 checklist 勾选 五、六 中截图相关条目
+2. 完成任务 B（报告定稿）后 → 勾选 五 中报告导出条目
+3. 完成任务 C（打包）后 → 勾选 七 全部条目
+4. 完成任务 E（邮件发送）后 → 勾选最后一条
+```
+
 ### 任务 E：最终提交
 
 目标：将最终压缩包发送至提交邮箱。
@@ -155,6 +323,30 @@
 完成标准：
 
 - 邮件已发送，附件为完整的压缩包。
+
+#### 人工操作流程
+
+```
+1. 最终检查：
+   - 解压压缩包到空目录，确认文件完整
+   - 在解压目录中运行 python -m unittest discover -s tests -v → 全部通过
+   - 打开 dist/SecureChat.exe 确认可启动
+   - 打开 document/ 确认报告 Word/PDF 存在
+
+2. 发送邮件：
+   - 收件人: xiongf@bjtu.edu.cn
+   - 主题: 第X组+端到端加密即时通讯软件设计与实现
+   - 正文:
+       老师您好，
+       附件为第X组课程设计作品"端到端加密即时通讯软件设计与实现"。
+       组员：XXX（学号 XXXXXXXX）
+       请查收，谢谢！
+   - 附件: 第X组+端到端加密即时通讯软件设计与实现.zip
+
+3. 确认：
+   - 检查"已发送"邮箱确认邮件发出
+   - 截图保存发送记录备查
+```
 
 ---
 
@@ -195,6 +387,51 @@ Web 端是自我拓展内容，在报告中应作为亮点展示：
 - 解压压缩包到一个空目录，验证可以按 README 从零运行。
 - 检查报告中的所有截图是否正确显示。
 - 检查报告中的技术描述是否与实际代码一致。
+
+---
+
+## 8. Ubuntu 服务器部署（多端现场演示）
+
+七阶段新增了远程部署能力，使得演示可以在教室中多设备同时进行。
+
+**完整指南**：[document/ubuntu_deploy_guide.md](document/ubuntu_deploy_guide.md)
+
+### 核心架构
+
+```
+浏览器 (HTTPS) → nginx (443, SSL 终止) → 静态 Web 文件
+浏览器 (WSS)   → nginx (443, /ws 路径) → chat_server.py (8765)
+```
+
+### 关键技术决策
+
+| 决策                   | 原因                                                                  |
+| ---------------------- | --------------------------------------------------------------------- |
+| 必须使用 HTTPS         | Web Crypto API (`crypto.subtle`) 仅在安全上下文可用                   |
+| nginx 反向代理         | SSL 终止 + WebSocket 升级 + 静态文件服务，一站式解决                  |
+| 自签名证书             | 教室演示场景够用，浏览器接受警告即可                                  |
+| WebSocket 地址自动检测 | `web/app.js` 已添加自动检测逻辑：远程访问时自动填入 `wss://<host>/ws` |
+
+### 代码改动
+
+- `web/app.js`：新增远程部署自动检测 WebSocket 地址（底部 `autoDetectServerUrl()`）
+- `chat_server.py`：无改动，已支持 `--host 0.0.0.0`
+
+### 快速部署流程
+
+```bash
+# 1. 上传项目到 Ubuntu 服务器
+scp -r InfoSecurityProj user@server:~/SecureChat
+
+# 2. 在服务器上运行一键部署脚本
+ssh user@server
+cd ~/SecureChat
+chmod +x deploy.sh
+./deploy.sh
+
+# 3. 各演示设备浏览器访问
+#    https://<服务器IP>/
+```
 
 ---
 
