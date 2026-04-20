@@ -1,0 +1,14 @@
+flowchart LR
+    classDef data fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef process fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+    classDef output fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+
+    CIPHER["📦 收到加密消息\n{wrapped_key,\nnonce,\nciphertext}"]:::data
+
+    RSA_DEC["① RSA-OAEP 解密\nwrapped_key → AES 密钥\n用 Bob 私钥解密"]:::process
+    AES_DEC["② AES-GCM 解密\n密文 → 明文\n验证完整性 Tag"]:::process
+    SHOW["③ 展示明文\n写入 Crypto Console"]:::process
+
+    PT["📝 明文消息\n'Hello Bob'"]:::output
+
+    CIPHER --> RSA_DEC --> AES_DEC --> SHOW --> PT

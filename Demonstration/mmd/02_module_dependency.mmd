@@ -1,0 +1,27 @@
+graph LR
+    classDef gui fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#000
+    classDef core fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef net fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef crypto fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+
+    DCG["desktop_chat_gui.py\n桌面聊天 GUI"]:::gui
+    IGUI["InfoSecurWork_GUI.py\nRSA 工具 GUI"]:::gui
+
+    SM["session_manager.py\n会话管理器"]:::core
+    CC["chat_client.py\n网络客户端"]:::net
+    CS["chat_server.py\n中继服务端"]:::net
+    CP["chat_protocol.py\n协议定义"]:::net
+
+    MC["message_crypto.py\n混合加密"]:::crypto
+    AES["aes_core.py\nAES-256-GCM"]:::crypto
+    RSA["rsa_core.py\nRSA-2048 OAEP"]:::crypto
+
+    DCG --> CC
+    DCG --> SM
+    SM --> MC
+    SM --> RSA
+    MC --> AES
+    MC --> RSA
+    CC --> CP
+    CS --> CP
+    IGUI --> RSA

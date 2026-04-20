@@ -1,0 +1,66 @@
+graph TB
+    classDef pres fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#000
+    classDef sess fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef net fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef proto fill:#fce4ec,stroke:#c62828,stroke-width:2px,color:#000
+    classDef crypto fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef ext fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#000
+
+    subgraph L1["表现层 Presentation"]
+        direction LR
+        GUI["desktop_chat_gui.py\nTkinter 桌面聊天 GUI"]:::pres
+        WEB["web/index.html + app.js\n浏览器 Web 客户端"]:::pres
+        RSA_GUI["InfoSecurWork_GUI.py\nRSA 独立工具 GUI"]:::pres
+    end
+
+    subgraph L2["会话管理层 Session"]
+        SM["session_manager.py\n密钥生命周期 · 联系人公钥 · 加解密门面"]:::sess
+    end
+
+    subgraph L3["网络通信层 Network"]
+        direction LR
+        CLIENT["chat_client.py\nWebSocket 客户端\n后台线程 asyncio"]:::net
+        SERVER["chat_server.py\nWebSocket 盲中继服务端\n路由转发 · 心跳管理"]:::net
+    end
+
+    subgraph L4["协议层 Protocol"]
+        direction LR
+        PROTO_PY["chat_protocol.py\nJSON 消息信封 · 类型校验"]:::proto
+        PROTO_JS["web/protocol.js\n等价 JS 实现"]:::proto
+    end
+
+    subgraph L5["密码学层 Crypto"]
+        direction LR
+        MC["message_crypto.py\n混合加密编排"]:::crypto
+        AES["aes_core.py\nAES-256-GCM"]:::crypto
+        RSA["rsa_core.py\nRSA-2048 OAEP"]:::crypto
+        CRYPTO_JS["web/crypto.js\nWeb Crypto API 等价实现"]:::crypto
+    end
+
+    subgraph L6["外部依赖"]
+        direction LR
+        LIB_PY["cryptography.hazmat\nPython 密码学库"]:::ext
+        LIB_WS["websockets\nWebSocket 实现"]:::ext
+        LIB_WC["Web Crypto API\n浏览器原生加密"]:::ext
+    end
+
+    GUI --> SM
+    WEB -.->|"直接调用 JS 模块"| CRYPTO_JS
+    RSA_GUI --> RSA
+
+    SM --> CLIENT
+    SM --> MC
+
+    CLIENT --> PROTO_PY
+    SERVER --> PROTO_PY
+    CLIENT <-->|"WebSocket\ntcp:8765"| SERVER
+
+    MC --> AES
+    MC --> RSA
+    CRYPTO_JS -.-> PROTO_JS
+
+    AES --> LIB_PY
+    RSA --> LIB_PY
+    CLIENT --> LIB_WS
+    SERVER --> LIB_WS
+    CRYPTO_JS -.-> LIB_WC

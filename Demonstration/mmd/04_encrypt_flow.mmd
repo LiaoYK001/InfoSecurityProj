@@ -1,0 +1,15 @@
+flowchart LR
+    classDef data fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef process fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+    classDef output fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+
+    PT["📝 明文消息\n'Hello Bob'"]:::data
+
+    GEN["① 生成一次性\nAES-256 密钥\n(32 bytes random)"]:::process
+    AES_ENC["② AES-GCM 加密\n明文 → 密文\n+ 12-byte Nonce\n+ 128-bit Tag"]:::process
+    RSA_ENC["③ RSA-OAEP 加密\nAES 密钥 → wrapped_key\n用 Bob 公钥加密"]:::process
+    B64["④ Base64 编码\n打包 JSON"]:::process
+
+    CIPHER["📦 加密消息\n{wrapped_key,\nnonce,\nciphertext}"]:::output
+
+    PT --> GEN --> AES_ENC --> RSA_ENC --> B64 --> CIPHER

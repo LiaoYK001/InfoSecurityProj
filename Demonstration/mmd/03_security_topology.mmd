@@ -1,0 +1,31 @@
+graph TB
+    classDef client fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+    classDef server fill:#fff8e1,stroke:#f57f17,stroke-width:2px,color:#000
+    classDef attacker fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000,stroke-dasharray:5 5
+
+    subgraph TrustZone_A["🔒 Alice 信任域"]
+        A_GUI["桌面客户端\nAlice"]:::client
+        A_KEY["🔑 Alice 私钥\n(仅本地持有)"]:::client
+    end
+
+    subgraph Untrusted["⚠️ 不可信区域"]
+        SRV["中继服务端\nchat_server.py\n(盲转发节点)"]:::server
+        NET["网络链路\nWebSocket / TCP"]:::server
+        ATK["🕵️ 潜在攻击者\n(窃听 / 入侵服务端)"]:::attacker
+    end
+
+    subgraph TrustZone_B["🔒 Bob 信任域"]
+        B_GUI["桌面/Web 客户端\nBob"]:::client
+        B_KEY["🔑 Bob 私钥\n(仅本地持有)"]:::client
+    end
+
+    A_GUI -->|"密文消息\nwrapped_key + nonce + ciphertext"| NET
+    NET --> SRV
+    SRV -->|"原样转发\n不解密 payload"| NET
+    NET -->|"密文消息"| B_GUI
+
+    ATK -.->|"❌ 无法解密\n缺少私钥"| SRV
+    ATK -.->|"❌ 无法解密\n缺少私钥"| NET
+
+    A_KEY -.->|"解密自己收到的消息"| A_GUI
+    B_KEY -.->|"解密自己收到的消息"| B_GUI

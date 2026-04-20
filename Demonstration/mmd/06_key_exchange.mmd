@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant A as Alice (客户端)
+    participant S as Server (盲中继)
+    participant B as Bob (客户端)
+
+    Note over A: generate_rsa_key_pair(2048)
+    A->>S: register {sender_id: "alice", payload: {public_key: alice_pub_pem}}
+
+    Note over B: generate_rsa_key_pair(2048)
+    B->>S: register {sender_id: "bob", payload: {public_key: bob_pub_pem}}
+
+    S->>A: user_list {users: {"alice": alice_pub, "bob": bob_pub}}
+    S->>B: user_list {users: {"alice": alice_pub, "bob": bob_pub}}
+
+    Note over A: 自动导入 Bob 公钥<br/>load_public_key_from_pem()
+    Note over B: 自动导入 Alice 公钥<br/>load_public_key_from_pem()
+
+    Note over A,B: 🔒 此后双方可互发端到端加密消息

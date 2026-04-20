@@ -1,0 +1,34 @@
+sequenceDiagram
+    participant A as Alice
+    participant SM_A as SessionManager<br/>(Alice)
+    participant C_A as ChatClient<br/>(Alice)
+    participant S as Server
+    participant C_B as ChatClient<br/>(Bob)
+    participant SM_B as SessionManager<br/>(Bob)
+    participant B as Bob
+
+    A->>SM_A: send_message("Hello Bob", "bob")
+    activate SM_A
+    SM_A->>SM_A: ① generate_aes_key(256)
+    SM_A->>SM_A: ② aes_core.encrypt_text()
+    SM_A->>SM_A: ③ rsa_core.encrypt_bytes()<br/>用 Bob 公钥加密 AES 密钥
+    SM_A-->>A: Crypto Console 显示加密日志
+    deactivate SM_A
+
+    SM_A->>C_A: send(chat_message)
+    C_A->>S: WebSocket: {type: "chat_message",<br/>sender: "alice", receiver: "bob",<br/>payload: {wrapped_key, nonce, ciphertext}}
+
+    Note over S: 盲转发：仅读 receiver_id<br/>不解析 payload
+
+    S->>C_B: WebSocket: 原样转发
+
+    C_B->>SM_B: on_message(chat_message)
+    activate SM_B
+    SM_B->>SM_B: ① rsa_core.decrypt_bytes()<br/>用 Bob 私钥恢复 AES 密钥
+    SM_B->>SM_B: ② aes_core.decrypt_text()<br/>AES-GCM 解密 + 完整性校验
+    SM_B-->>B: Crypto Console 显示解密日志
+    deactivate SM_B
+
+    B->>B: 聊天界面显示 "Hello Bob"
+    C_B->>S: ack {ack_for: msg_timestamp}
+    S->>C_A: 转发 ack

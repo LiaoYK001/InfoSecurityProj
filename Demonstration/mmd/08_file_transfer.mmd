@@ -1,0 +1,34 @@
+flowchart TB
+    classDef small fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    classDef big fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef common fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+
+    FILE["📎 用户选择文件"]:::common
+    CHECK{"文件大小\n≤ 5 MB?"}:::common
+
+    subgraph SmallFile["小文件：整体传输"]
+        direction TB
+        S1["读取完整文件字节"]:::small
+        S2["encrypt_file_data()\nAES-GCM 加密 + RSA 包裹密钥"]:::small
+        S3["make_file_transfer_message()\n单条消息发送"]:::small
+    end
+
+    subgraph BigFile["大文件：分块传输"]
+        direction TB
+        B1["按 1 MB 切分为 N 块"]:::big
+        B2["每块独立 encrypt_file_data()"]:::big
+        B3["make_file_chunk_message()\ntransfer_id + chunk_index + total_chunks"]:::big
+        B4["顺序发送 N 条消息"]:::big
+    end
+
+    RECV_S["接收方：直接解密\n→ 文件字节"]:::common
+    RECV_B["接收方：逐块解密\n→ 缓存 → 全部到齐后拼装"]:::common
+    SHOW["图片自动预览 🖼️\n其他文件提供保存按钮 💾"]:::common
+
+    FILE --> CHECK
+    CHECK -->|"是"| SmallFile
+    CHECK -->|"否"| BigFile
+    S1 --> S2 --> S3
+    B1 --> B2 --> B3 --> B4
+    S3 --> RECV_S --> SHOW
+    B4 --> RECV_B --> SHOW
