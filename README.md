@@ -138,13 +138,15 @@ chmod +x deploy.sh
 ### 安装 PyInstaller
 
 ```bash
-pip install pyinstaller
+python -m pip install pyinstaller
 ```
+
+> 请先激活项目依赖所在的 Python 环境，再执行打包命令；否则可能在运行时出现 `ModuleNotFoundError: No module named 'websockets'`。
 
 ### 打包聊天客户端
 
 ```bash
-pyinstaller --onefile --windowed --name SecureChat desktop_chat_gui.py
+python -m PyInstaller SecureChat.spec
 ```
 
 产物位于 `dist/SecureChat.exe`。
@@ -152,10 +154,24 @@ pyinstaller --onefile --windowed --name SecureChat desktop_chat_gui.py
 ### 打包服务端
 
 ```bash
-pyinstaller --onefile --console --name SecureChatServer chat_server.py
+python -m PyInstaller SecureChatServer.spec
 ```
 
 产物位于 `dist/SecureChatServer.exe`。
+
+### 一键构建全部
+
+```powershell
+.\build_exes.ps1
+```
+
+客户端和服务端都使用 spec 固化依赖；RSA 工具仍使用普通命令构建即可。
+
+只构建聊天客户端和服务端时可执行：
+
+```powershell
+.\build_exes.ps1 -Targets client,server
+```
 
 > **注意**：`dist/RSA_Encrypt_Decrypt_Tool.exe` 是前期 RSA 单机工具的历史产物，不是当前课设主交付程序。
 

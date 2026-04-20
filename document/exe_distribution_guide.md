@@ -20,38 +20,30 @@ pip install pyinstaller
 ### 1. SecureChat 桌面客户端（窗口模式）
 
 ```bash
-pyinstaller --onefile --windowed --name SecureChat \
-  --hidden-import chat_client \
-  --hidden-import chat_protocol \
-  --hidden-import session_manager \
-  --hidden-import message_crypto \
-  --hidden-import rsa_core \
-  --hidden-import aes_core \
-  desktop_chat_gui.py
+python -m PyInstaller SecureChat.spec
 ```
 
 - `--onefile`：打包为单个 exe
 - `--windowed`：隐藏控制台窗口（GUI 应用）
-- `--hidden-import`：显式包含项目本地模块（PyInstaller 静态分析可能遗漏这些动态导入）
-- 产物：`dist/SecureChat.exe`（约 170 MB）
+- `SecureChat.spec`：已显式收集本地模块和 `websockets` 包，避免运行时报 `ModuleNotFoundError`
+- 产物：`dist/SecureChat.exe`
 
-> ⚠️ **必须加 `--hidden-import`**。不加的话 exe 只有约 14 MB，运行时报 `ModuleNotFoundError: No module named 'chat_client'`。
+> ⚠️ **请在安装了项目依赖的 Python 环境中执行**。推荐先激活虚拟环境，再运行 `python -m PyInstaller SecureChat.spec`。
 
 ### 2. SecureChatServer 服务端（控制台模式）
 
 ```bash
-pyinstaller --onefile --console --name SecureChatServer \
-  --hidden-import chat_protocol \
-  chat_server.py
+python -m PyInstaller SecureChatServer.spec
 ```
 
 - `--console`：保留控制台窗口（查看服务端日志）
-- 产物：`dist/SecureChatServer.exe`（约 10 MB）
+- `SecureChatServer.spec`：已显式收集 `chat_protocol` 和 `websockets`，避免运行时报缺包
+- 产物：`dist/SecureChatServer.exe`
 
 ### 3. RSA_Encrypt_Decrypt_Tool 独立加解密工具（窗口模式）
 
 ```bash
-pyinstaller --onefile --windowed --name RSA_Encrypt_Decrypt_Tool InfoSecurWork_GUI.py
+python -m PyInstaller --onefile --windowed --name RSA_Encrypt_Decrypt_Tool InfoSecurWork_GUI.py
 ```
 
 - 产物：`dist/RSA_Encrypt_Decrypt_Tool.exe`（约 13 MB）
@@ -65,16 +57,26 @@ pyinstaller --onefile --windowed --name RSA_Encrypt_Decrypt_Tool InfoSecurWork_G
 ```bash
 # 清理旧构建
 rmdir /s /q build 2>nul
-del *.spec 2>nul
 
 # 构建三个 exe
-pyinstaller --onefile --windowed --name SecureChat --hidden-import chat_client --hidden-import chat_protocol --hidden-import session_manager --hidden-import message_crypto --hidden-import rsa_core --hidden-import aes_core desktop_chat_gui.py -y
-pyinstaller --onefile --console --name SecureChatServer --hidden-import chat_protocol chat_server.py -y
-pyinstaller --onefile --windowed --name RSA_Encrypt_Decrypt_Tool InfoSecurWork_GUI.py -y
+python -m PyInstaller SecureChat.spec -y
+python -m PyInstaller SecureChatServer.spec -y
+python -m PyInstaller --onefile --windowed --name RSA_Encrypt_Decrypt_Tool InfoSecurWork_GUI.py -y
 
 # 清理中间文件
 rmdir /s /q build
-del *.spec
+```
+
+或者直接执行：
+
+```powershell
+.\build_exes.ps1
+```
+
+如果只想构建聊天相关程序，可执行：
+
+```powershell
+.\build_exes.ps1 -Targets client,server
 ```
 
 产物全部在 `dist/` 目录下。
@@ -157,11 +159,34 @@ SecureChat.exe
 
 ```bash
 # 使用 UPX 压缩（需先安装 UPX 并加入 PATH）
-pyinstaller --onefile --windowed --name SecureChat desktop_chat_gui.py --upx-dir /path/to/upx
+python -m PyInstaller SecureChat.spec --upx-dir /path/to/upx
 ```
 
 ### Q: 想添加自定义图标
 
 ```bash
-pyinstaller --onefile --windowed --name SecureChat --icon=myicon.ico desktop_chat_gui.py
+python -m PyInstaller SecureChat.spec --icon=myicon.ico
 ```
+
+### Q: 运行 `SecureChat.exe` 报 `No module named 'websockets'`
+
+说明你打包时没有使用安装了项目依赖的 Python 环境，或者使用了旧的命令。重新激活虚拟环境后执行：
+
+```bash
+python -m PyInstaller SecureChat.spec -y
+```
+
+如果仍有问题，先删除旧的 `dist/SecureChat.exe` 后再重打包，避免误运行历史产物。
+
+### Q: 以后每个 exe 都要手写 spec 吗
+
+不需要。只有下面两类场景才建议用 spec：
+
+1. 依赖存在动态导入、数据文件或二进制扩展，例如 `websockets` 这类包。
+2. 需要把打包方式长期固定下来，避免不同机器上命令漂移。
+
+像 `RSA_Encrypt_Decrypt_Tool` 这种纯入口脚本、依赖简单的程序，继续用普通 `python -m PyInstaller ...` 命令就够了。
+
+如果只是嫌命令麻烦，直接运行 `build_exes.ps1` 即可，不需要手动敲所有命令。
+
+如果脚本提示某个输出文件正在使用，先关闭对应 exe 再重试；这是为了避免 PyInstaller 在覆盖被占用文件时中途失败。
