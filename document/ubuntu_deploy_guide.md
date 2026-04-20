@@ -660,6 +660,8 @@ chmod +x deploy.sh
 | `chat_server.py`         | 8765 | WebSocket 中继转发（盲转发）       |
 | `python3 -m http.server` | 8080 | 提供 Web UI 静态文件 (HTML/CSS/JS) |
 
+> ⚠️ **注意**：Web 静态文件服务必须从 `~/SecureChat/web/` 目录启动（`cd ~/SecureChat/web`），**不是**项目根目录。否则访问 `/` 会显示项目目录列表而不是聊天页面。
+
 #### 快速启动（tmux 方式，推荐演示用）
 
 ```bash
