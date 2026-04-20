@@ -20,17 +20,29 @@ pip install pyinstaller
 ### 1. SecureChat 桌面客户端（窗口模式）
 
 ```bash
-pyinstaller --onefile --windowed --name SecureChat desktop_chat_gui.py
+pyinstaller --onefile --windowed --name SecureChat \
+  --hidden-import chat_client \
+  --hidden-import chat_protocol \
+  --hidden-import session_manager \
+  --hidden-import message_crypto \
+  --hidden-import rsa_core \
+  --hidden-import aes_core \
+  desktop_chat_gui.py
 ```
 
 - `--onefile`：打包为单个 exe
 - `--windowed`：隐藏控制台窗口（GUI 应用）
+- `--hidden-import`：显式包含项目本地模块（PyInstaller 静态分析可能遗漏这些动态导入）
 - 产物：`dist/SecureChat.exe`（约 170 MB）
+
+> ⚠️ **必须加 `--hidden-import`**。不加的话 exe 只有约 14 MB，运行时报 `ModuleNotFoundError: No module named 'chat_client'`。
 
 ### 2. SecureChatServer 服务端（控制台模式）
 
 ```bash
-pyinstaller --onefile --console --name SecureChatServer chat_server.py
+pyinstaller --onefile --console --name SecureChatServer \
+  --hidden-import chat_protocol \
+  chat_server.py
 ```
 
 - `--console`：保留控制台窗口（查看服务端日志）
@@ -56,8 +68,8 @@ rmdir /s /q build 2>nul
 del *.spec 2>nul
 
 # 构建三个 exe
-pyinstaller --onefile --windowed --name SecureChat desktop_chat_gui.py -y
-pyinstaller --onefile --console --name SecureChatServer chat_server.py -y
+pyinstaller --onefile --windowed --name SecureChat --hidden-import chat_client --hidden-import chat_protocol --hidden-import session_manager --hidden-import message_crypto --hidden-import rsa_core --hidden-import aes_core desktop_chat_gui.py -y
+pyinstaller --onefile --console --name SecureChatServer --hidden-import chat_protocol chat_server.py -y
 pyinstaller --onefile --windowed --name RSA_Encrypt_Decrypt_Tool InfoSecurWork_GUI.py -y
 
 # 清理中间文件
