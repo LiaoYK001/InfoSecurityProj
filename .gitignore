@@ -4,3 +4,6 @@
 /.venv
 /tests/__pycache__
 *.exe
+/dist
+/build
+*.spec
