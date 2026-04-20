@@ -3,4 +3,4 @@
 /.vscode
 /.venv
 /tests/__pycache__
-dist/SecureChat.exe
+*.exe
