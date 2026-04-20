@@ -809,14 +809,52 @@ ss -tlnp | grep -E '8080|8765'
 3. 点击该 Location 右侧的 **⚙️ 齿轮图标**，在 **Custom Nginx Configuration** 中粘贴：
 
    ```nginx
+    proxy_http_version 1.1;
    proxy_set_header Upgrade $http_upgrade;
    proxy_set_header Connection "upgrade";
-   proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_cache_bypass $http_upgrade;
    proxy_read_timeout 86400;
    proxy_send_timeout 86400;
    ```
 
 4. 点击 **Save**。
+
+#### 步骤 2B（兜底，推荐）：在 Advanced 选项卡直接写路由
+
+如果按 2A 配置后，客户端仍提示 WebSocket 连接错误，可改为你已验证可用的 **Advanced** 方案。
+
+1. 编辑该 Proxy Host → **Advanced** 选项卡
+2. 粘贴以下配置（将 `<Ubuntu-IP>` 替换为实际内网 IP）：
+
+   ```nginx
+   location / {
+        proxy_pass http://<Ubuntu-IP>:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+   }
+
+   location /ws {
+        proxy_pass http://<Ubuntu-IP>:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+   }
+   ```
+
+3. 点击 **Save**。
 
 #### 步骤 3：验证
 
@@ -825,6 +863,10 @@ ss -tlnp | grep -E '8080|8765'
 - Web UI 页面正常加载 ✅
 - 服务器地址输入框自动填充为 `wss://chat.yourdomain.com/ws` ✅（app.js 会自动检测）
 - 输入用户名 → 点击连接 → 状态变为"已连接" ✅
+
+> 说明：直接在浏览器地址栏访问 `https://chat.yourdomain.com/ws` 出现
+> `Failed to open a WebSocket connection: missing Upgrade header.`
+> 是正常现象。因为地址栏发起的是普通 HTTP 请求，不是 WebSocket 客户端握手请求。
 
 > **原理**：`web/app.js` 中的 `autoDetectServerUrl()` 函数会自动检测：当通过非 localhost 的 HTTPS 访问时，自动将 WebSocket 地址设为 `wss://{当前域名}/ws`。无需手动填写。
 
@@ -850,15 +892,21 @@ ss -tlnp | grep -E '8080|8765'
 
 ```
 ===== NPM 端 =====
-Proxy Host:
-  Domain:   chat.yourdomain.com
-  Forward:  http://<Ubuntu-IP>:8080
-  WebSocket Support: ✅
-  SSL: ✅ Force SSL
+方式 A（常规）
+    Proxy Host:
+        Domain:   chat.yourdomain.com
+        Forward:  http://<Ubuntu-IP>:8080
+        WebSocket Support: ✅
+        SSL: ✅ Force SSL
 
-Custom Location:
-  /ws → http://<Ubuntu-IP>:8765
-  + WebSocket upgrade headers
+    Custom Location:
+        /ws → http://<Ubuntu-IP>:8765
+        + WebSocket upgrade headers
+
+方式 B（兜底，已验证可用）
+    在 Advanced 中写两段 location：
+        /   → http://<Ubuntu-IP>:8080
+        /ws → http://<Ubuntu-IP>:8765
 ```
 
 ---
