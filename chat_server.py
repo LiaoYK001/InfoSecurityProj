@@ -111,6 +111,9 @@ class ChatRelayServer:
                     )
                 elif msg_type == chat_protocol.MSG_CHAT_MESSAGE:
                     await self._handle_chat_message(msg, sender_id)
+                elif msg_type in (chat_protocol.MSG_FILE_TRANSFER,
+                                  chat_protocol.MSG_FILE_CHUNK):
+                    await self._handle_chat_message(msg, sender_id)
                 elif msg_type == chat_protocol.MSG_PUBLIC_KEY:
                     await self._handle_public_key_message(msg)
                 else:

@@ -280,3 +280,75 @@ export async function decryptMessage(payload, localPrivateKey) {
         },
     };
 }
+
+// ── AES-GCM 字节加密 / 解密（文件传输用）────────────────
+
+/**
+ * AES-GCM 加密原始字节
+ * @param {Uint8Array} data
+ * @param {Uint8Array} keyBytes 32 字节 AES 密钥
+ * @returns {Promise<{nonce: string, ciphertext: string}>} Base64 编码结果
+ */
+export async function aesEncryptBytes(data, keyBytes) {
+    const key = await crypto.subtle.importKey(
+        "raw", keyBytes, { name: "AES-GCM" }, false, ["encrypt"]
+    );
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: nonce, tagLength: 128 }, key, data
+    );
+    return {
+        nonce: arrayBufferToBase64(nonce),
+        ciphertext: arrayBufferToBase64(ct),
+    };
+}
+
+/**
+ * AES-GCM 解密原始字节
+ * @param {string} nonceB64
+ * @param {string} ciphertextB64
+ * @param {Uint8Array} keyBytes
+ * @returns {Promise<Uint8Array>}
+ */
+export async function aesDecryptBytes(nonceB64, ciphertextB64, keyBytes) {
+    const key = await crypto.subtle.importKey(
+        "raw", keyBytes, { name: "AES-GCM" }, false, ["decrypt"]
+    );
+    const nonce = base64ToArrayBuffer(nonceB64);
+    const ct = base64ToArrayBuffer(ciphertextB64);
+    const plain = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: nonce, tagLength: 128 }, key, ct
+    );
+    return new Uint8Array(plain);
+}
+
+// ── 混合加密 / 解密文件字节 ─────────────────────────────
+
+/**
+ * 混合加密文件字节：AES-GCM 加密 + RSA-OAEP 包裹密钥
+ * @param {Uint8Array} fileBytes
+ * @param {CryptoKey} peerPublicKey
+ * @returns {Promise<{wrapped_key: string, nonce: string, ciphertext: string}>}
+ */
+export async function encryptFileData(fileBytes, peerPublicKey) {
+    const sessionKey = generateAESKey();
+    const aesResult = await aesEncryptBytes(fileBytes, sessionKey);
+    const wrappedKeyBytes = await rsaWrapKey(sessionKey, peerPublicKey);
+    return {
+        wrapped_key: arrayBufferToBase64(wrappedKeyBytes),
+        nonce: aesResult.nonce,
+        ciphertext: aesResult.ciphertext,
+    };
+}
+
+/**
+ * 混合解密文件字节
+ * @param {object} payload { wrapped_key, nonce, ciphertext }
+ * @param {CryptoKey} localPrivateKey
+ * @returns {Promise<Uint8Array>}
+ */
+export async function decryptFileData(payload, localPrivateKey) {
+    const wrappedKeyBytes = base64ToArrayBuffer(payload.wrapped_key);
+    const sessionKey = await rsaUnwrapKey(wrappedKeyBytes, localPrivateKey);
+    return aesDecryptBytes(payload.nonce, payload.ciphertext, sessionKey);
+}

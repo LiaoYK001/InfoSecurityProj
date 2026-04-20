@@ -61,26 +61,36 @@ MSG_HEARTBEAT = "heartbeat"
 MSG_USER_LIST = "user_list"
 """服务端广播当前在线用户列表（附带公钥）。"""
 
+MSG_FILE_TRANSFER = "file_transfer"
+"""小文件整体传输（≤ 5 MB），payload 包含加密文件内容和元信息。"""
+
+MSG_FILE_CHUNK = "file_chunk"
+"""大文件分块传输（单块），payload 包含加密块内容、传输 ID 和序号。"""
+
 # 所有合法消息类型集合，便于校验
 VALID_TYPES = {
     MSG_REGISTER, MSG_PUBLIC_KEY, MSG_CHAT_MESSAGE,
     MSG_ACK, MSG_ERROR, MSG_HEARTBEAT, MSG_USER_LIST,
+    MSG_FILE_TRANSFER, MSG_FILE_CHUNK,
 }
 
 # 各消息类型在 payload 中必须包含的字段
 _PAYLOAD_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
-    MSG_REGISTER:     ("public_key",),
-    MSG_PUBLIC_KEY:   ("public_key",),
-    MSG_CHAT_MESSAGE: ("wrapped_key", "nonce", "ciphertext"),
-    MSG_ACK:          ("ack_for",),
-    MSG_ERROR:        ("message",),
-    MSG_HEARTBEAT:    (),
-    MSG_USER_LIST:    ("users",),
+    MSG_REGISTER:      ("public_key",),
+    MSG_PUBLIC_KEY:    ("public_key",),
+    MSG_CHAT_MESSAGE:  ("wrapped_key", "nonce", "ciphertext"),
+    MSG_ACK:           ("ack_for",),
+    MSG_ERROR:         ("message",),
+    MSG_HEARTBEAT:     (),
+    MSG_USER_LIST:     ("users",),
+    MSG_FILE_TRANSFER: ("wrapped_key", "nonce", "ciphertext", "filename", "filesize", "mime_type"),
+    MSG_FILE_CHUNK:    ("wrapped_key", "nonce", "ciphertext", "transfer_id", "chunk_index", "total_chunks", "filename", "filesize", "mime_type"),
 }
 
 # 必须提供非空 receiver_id 的消息类型
 _REQUIRES_RECEIVER: set[str] = {
     MSG_PUBLIC_KEY, MSG_CHAT_MESSAGE, MSG_ACK,
+    MSG_FILE_TRANSFER, MSG_FILE_CHUNK,
 }
 
 
@@ -168,6 +178,65 @@ def make_user_list_message(users: dict[str, str]) -> str:
     :param users: {user_id: public_key_pem} 字典。
     """
     return _build(MSG_USER_LIST, "server", "", {"users": users})
+
+
+def make_file_transfer_message(
+    sender_id: str,
+    receiver_id: str,
+    encrypted_payload: Mapping[str, object],
+    filename: str,
+    filesize: int,
+    mime_type: str,
+) -> str:
+    """
+    构造小文件整体传输消息（≤ 5 MB）。
+
+    :param encrypted_payload: message_crypto.encrypt_file_data 的输出。
+    :param filename: 原始文件名。
+    :param filesize: 原始文件大小（字节）。
+    :param mime_type: MIME 类型（如 image/png）。
+    """
+    payload = {
+        "wrapped_key": encrypted_payload["wrapped_key"],
+        "nonce": encrypted_payload["nonce"],
+        "ciphertext": encrypted_payload["ciphertext"],
+        "filename": filename,
+        "filesize": filesize,
+        "mime_type": mime_type,
+    }
+    return _build(MSG_FILE_TRANSFER, sender_id, receiver_id, payload)
+
+
+def make_file_chunk_message(
+    sender_id: str,
+    receiver_id: str,
+    encrypted_payload: Mapping[str, object],
+    transfer_id: str,
+    chunk_index: int,
+    total_chunks: int,
+    filename: str,
+    filesize: int,
+    mime_type: str,
+) -> str:
+    """
+    构造大文件分块传输消息（单块）。
+
+    :param transfer_id: 传输 ID（UUID，标识同一文件的所有块）。
+    :param chunk_index: 当前块索引（从 0 开始）。
+    :param total_chunks: 总块数。
+    """
+    payload = {
+        "wrapped_key": encrypted_payload["wrapped_key"],
+        "nonce": encrypted_payload["nonce"],
+        "ciphertext": encrypted_payload["ciphertext"],
+        "transfer_id": transfer_id,
+        "chunk_index": chunk_index,
+        "total_chunks": total_chunks,
+        "filename": filename,
+        "filesize": filesize,
+        "mime_type": mime_type,
+    }
+    return _build(MSG_FILE_CHUNK, sender_id, receiver_id, payload)
 
 
 # -------------------- 消息解析 --------------------

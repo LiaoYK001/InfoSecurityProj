@@ -387,3 +387,39 @@ html, body {
 @media (max-width: 700px) {
     #sidebar { width: 200px; min-width: 200px; }
 }
+
+/* ── 文件消息样式 ──────────────────────────────────────── */
+.file-info {
+    font-size: 13px;
+    padding: 2px 0;
+}
+.chat-image {
+    display: block;
+    max-width: 300px;
+    max-height: 300px;
+    border-radius: 8px;
+    margin: 4px 0;
+    cursor: pointer;
+}
+.file-save-link {
+    display: inline-block;
+    margin-top: 2px;
+    color: #4fc3f7;
+    cursor: pointer;
+    font-size: 12px;
+    text-decoration: underline;
+}
+#btn-file {
+    width: 36px;
+    font-size: 16px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+#btn-file:hover {
+    background: var(--bg-input);
+    color: var(--text-primary);
+}

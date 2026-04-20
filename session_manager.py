@@ -130,3 +130,34 @@ class SessionManager:
             message_payload,
             self._key_manager.require_private_key(),
         )
+
+    # -------------------- 文件数据加密 / 解密 --------------------
+
+    def encrypt_file_for_peer(self, peer_id: str, file_bytes: bytes) -> dict[str, object]:
+        """
+        使用混合加密为指定对端加密文件数据。
+
+        :param peer_id: 接收方用户 ID。
+        :param file_bytes: 文件原始字节。
+        :return: 密文字典（wrapped_key / nonce / ciphertext / debug）。
+        :raises ValueError: 对端公钥未导入时抛出。
+        """
+        peer_pub = self._peer_keys.get(peer_id)
+        if peer_pub is None:
+            raise ValueError(f"尚未导入用户 {peer_id} 的公钥，无法加密。")
+
+        return message_crypto.encrypt_file_data(
+            file_bytes, peer_pub, self._key_manager
+        )
+
+    def decrypt_file_from_message(self, message_payload: dict[str, object]) -> dict[str, object]:
+        """
+        解密收到的混合加密文件数据。
+
+        :param message_payload: 包含 wrapped_key / nonce / ciphertext 的字典。
+        :return: 包含 file_bytes(bytes) 和 debug 的字典。
+        """
+        return message_crypto.decrypt_file_data(
+            message_payload,
+            self._key_manager.require_private_key(),
+        )

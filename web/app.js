@@ -33,7 +33,14 @@ const state = {
     chatHistory: new Map(),
     /** @type {number|null} 心跳定时器 */
     heartbeatTimer: null,
+    /** @type {Map<string, object>} transferId → 分块缓冲 */
+    chunkBuffers: new Map(),
 };
+
+// 文件大小限制
+const SMALL_FILE_LIMIT = 5 * 1024 * 1024;
+const FILE_SIZE_LIMIT = 50 * 1024 * 1024;
+const CHUNK_SIZE = 1 * 1024 * 1024;
 
 // ── DOM 元素引用 ─────────────────────────────────────────
 
@@ -49,6 +56,8 @@ const dom = {
     chatMessages:     document.getElementById("chat-messages"),
     msgInput:         document.getElementById("msg-input"),
     btnSend:          document.getElementById("btn-send"),
+    btnFile:          document.getElementById("btn-file"),
+    fileInput:        document.getElementById("file-input"),
     connStatus:       document.getElementById("connection-status"),
     cryptoConsole:    document.getElementById("crypto-console"),
 };
@@ -221,6 +230,12 @@ async function handleMessage(raw) {
         case Protocol.MSG_CHAT_MESSAGE:
             await handleChatMessage(msg);
             break;
+        case Protocol.MSG_FILE_TRANSFER:
+            await handleFileTransfer(msg);
+            break;
+        case Protocol.MSG_FILE_CHUNK:
+            await handleFileChunk(msg);
+            break;
         case Protocol.MSG_ACK:
             cryptoLog("recv", `收到 ACK: ${msg.payload.ack_for}`);
             break;
@@ -351,6 +366,123 @@ dom.msgInput.addEventListener("keydown", (e) => {
     }
 });
 
+// ── 文件发送 ───────────────────────────────────────────────
+
+dom.btnFile.addEventListener("click", () => dom.fileInput.click());
+dom.fileInput.addEventListener("change", handleFileSelect);
+
+async function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    dom.fileInput.value = "";
+
+    if (file.size > FILE_SIZE_LIMIT) {
+        cryptoLog("error", `文件过大: ${(file.size / 1024 / 1024).toFixed(1)} MB，上限 50 MB`);
+        return;
+    }
+    if (!state.activePeer || !state.peerKeys.has(state.activePeer)) {
+        cryptoLog("error", "请先选择联系人（需已获取公钥）");
+        return;
+    }
+
+    const arrayBuf = await file.arrayBuffer();
+    const fileBytes = new Uint8Array(arrayBuf);
+    const peerKey = state.peerKeys.get(state.activePeer);
+    const mimeType = file.type || "application/octet-stream";
+
+    cryptoLog("encrypt", `开始加密文件: ${file.name} (${formatSize(file.size)})`);
+
+    try {
+        if (file.size <= SMALL_FILE_LIMIT) {
+            const encrypted = await Crypto.encryptFileData(fileBytes, peerKey);
+            const msg = Protocol.makeFileTransferMessage(
+                state.userId, state.activePeer, encrypted,
+                file.name, file.size, mimeType,
+            );
+            state.ws.send(msg);
+            cryptoLog("send", `文件已发送: ${file.name}`);
+        } else {
+            const transferId = crypto.randomUUID();
+            const totalChunks = Math.ceil(fileBytes.length / CHUNK_SIZE);
+            for (let i = 0; i < totalChunks; i++) {
+                const chunk = fileBytes.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                const encrypted = await Crypto.encryptFileData(chunk, peerKey);
+                const msg = Protocol.makeFileChunkMessage(
+                    state.userId, state.activePeer, encrypted,
+                    transferId, i, totalChunks,
+                    file.name, file.size, mimeType,
+                );
+                state.ws.send(msg);
+                cryptoLog("send", `已发送块 ${i + 1}/${totalChunks}`);
+            }
+        }
+        addFileMessage(state.activePeer, "sent", file.name, file.size, mimeType, fileBytes);
+    } catch (err) {
+        cryptoLog("error", `文件加密/发送失败: ${err.message}`);
+    }
+}
+
+// ── 文件接收 ───────────────────────────────────────────────
+
+async function handleFileTransfer(msg) {
+    const payload = msg.payload;
+    cryptoLog("recv", `收到来自 ${msg.sender_id} 的文件: ${payload.filename}`);
+    try {
+        const fileBytes = await Crypto.decryptFileData(payload, state.keyPair.privateKey);
+        cryptoLog("decrypt", `文件解密成功: ${formatSize(fileBytes.length)}`);
+        addFileMessage(
+            msg.sender_id, "received",
+            payload.filename, payload.filesize, payload.mime_type, fileBytes,
+        );
+    } catch (err) {
+        cryptoLog("error", `文件解密失败: ${err.message}`);
+    }
+}
+
+async function handleFileChunk(msg) {
+    const p = msg.payload;
+    const tid = p.transfer_id;
+
+    try {
+        const chunkBytes = await Crypto.decryptFileData(p, state.keyPair.privateKey);
+
+        if (!state.chunkBuffers.has(tid)) {
+            state.chunkBuffers.set(tid, {
+                chunks: new Map(),
+                total: p.total_chunks,
+                filename: p.filename,
+                filesize: p.filesize,
+                mimeType: p.mime_type,
+                senderId: msg.sender_id,
+            });
+            cryptoLog("recv", `开始接收分块文件: ${p.filename} (${p.total_chunks} 块)`);
+        }
+        const buf = state.chunkBuffers.get(tid);
+        buf.chunks.set(p.chunk_index, chunkBytes);
+        cryptoLog("recv", `收到块 ${p.chunk_index + 1}/${p.total_chunks}`);
+
+        if (buf.chunks.size === buf.total) {
+            let totalLen = 0;
+            for (const c of buf.chunks.values()) totalLen += c.length;
+            const assembled = new Uint8Array(totalLen);
+            let offset = 0;
+            for (let i = 0; i < buf.total; i++) {
+                const c = buf.chunks.get(i);
+                assembled.set(c, offset);
+                offset += c.length;
+            }
+            cryptoLog("decrypt", `文件拼装完成: ${buf.filename} (${formatSize(assembled.length)})`);
+            addFileMessage(
+                buf.senderId, "received",
+                buf.filename, buf.filesize, buf.mimeType, assembled,
+            );
+            state.chunkBuffers.delete(tid);
+        }
+    } catch (err) {
+        cryptoLog("error", `文件块解密失败: ${err.message}`);
+    }
+}
+
 // ── 联系人 UI ────────────────────────────────────────────
 
 function renderContacts(users) {
@@ -435,6 +567,20 @@ function addChatMessage(peerId, type, text) {
     }
 }
 
+function addFileMessage(peerId, type, filename, filesize, mimeType, fileBytes) {
+    if (!state.chatHistory.has(peerId)) {
+        state.chatHistory.set(peerId, []);
+    }
+    const entry = {
+        type, time: new Date().toLocaleTimeString(),
+        isFile: true, filename, filesize, mimeType, fileBytes,
+    };
+    state.chatHistory.get(peerId).push(entry);
+    if (peerId === state.activePeer) {
+        appendFileToUI(entry);
+    }
+}
+
 function renderChatHistory(peerId) {
     dom.chatMessages.innerHTML = "";
     const history = state.chatHistory.get(peerId) || [];
@@ -450,7 +596,11 @@ function renderChatHistory(peerId) {
     }
 
     for (const entry of history) {
-        appendMessageToUI(entry);
+        if (entry.isFile) {
+            appendFileToUI(entry);
+        } else {
+            appendMessageToUI(entry);
+        }
     }
 }
 
@@ -464,6 +614,51 @@ function appendMessageToUI(entry) {
     div.innerHTML = `${escapeHtml(entry.text)}<div class="msg-meta">${entry.time}</div>`;
     dom.chatMessages.appendChild(div);
     dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+}
+
+function appendFileToUI(entry) {
+    const emptyState = dom.chatMessages.querySelector(".empty-state");
+    if (emptyState) emptyState.remove();
+
+    const div = document.createElement("div");
+    div.className = `message ${entry.type}`;
+
+    const sizeStr = formatSize(entry.filesize);
+    let html = `<div class="file-info">📎 ${escapeHtml(entry.filename)} (${sizeStr})</div>`;
+
+    // 图片预览
+    if (entry.mimeType && entry.mimeType.startsWith("image/")) {
+        const blob = new Blob([entry.fileBytes], { type: entry.mimeType });
+        const url = URL.createObjectURL(blob);
+        html += `<img src="${url}" class="chat-image">`;
+    }
+
+    html += `<div class="msg-meta">${entry.time}</div>`;
+    div.innerHTML = html;
+
+    // 保存按钮
+    const saveBtn = document.createElement("a");
+    saveBtn.textContent = "💾 保存";
+    saveBtn.className = "file-save-link";
+    saveBtn.addEventListener("click", () => {
+        const blob = new Blob([entry.fileBytes], { type: entry.mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = entry.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+    div.appendChild(saveBtn);
+
+    dom.chatMessages.appendChild(div);
+    dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1024 / 1024).toFixed(1) + " MB";
 }
 
 // ── 工具函数 ─────────────────────────────────────────────

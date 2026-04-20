@@ -90,6 +90,56 @@ def decrypt_text(cipher_payload: dict[str, str], key: bytes) -> str:
     return plaintext_bytes.decode("utf-8")
 
 
+def encrypt_bytes(data: bytes, key: bytes) -> dict[str, str]:
+    """
+    使用 AES-GCM 加密原始字节数据。
+
+    与 encrypt_text 平行，但直接操作 bytes，不做 UTF-8 编解码，
+    适用于文件内容等二进制数据的加密。
+
+    :param data: 待加密的原始字节。
+    :param key: AES 密钥（16/24/32 字节）。
+    :return: 包含 "nonce" 和 "ciphertext" 两个 Base64 字符串的字典。
+    :raises TypeError: data 不是 bytes 时抛出。
+    :raises ValueError: 密钥长度非法时抛出。
+    """
+    if not isinstance(data, bytes):
+        raise TypeError("data 必须是 bytes 类型")
+    _validate_key(key)
+
+    nonce = os.urandom(_NONCE_BYTES)
+    aesgcm = AESGCM(key)
+    ct = aesgcm.encrypt(nonce, data, None)
+
+    return {
+        "nonce": base64.b64encode(nonce).decode("ascii"),
+        "ciphertext": base64.b64encode(ct).decode("ascii"),
+    }
+
+
+def decrypt_bytes(cipher_payload: dict[str, str], key: bytes) -> bytes:
+    """
+    使用 AES-GCM 解密原始字节数据。
+
+    与 decrypt_text 平行，但返回原始 bytes，不做 UTF-8 解码。
+
+    :param cipher_payload: 包含 "nonce" 和 "ciphertext" 的字典（Base64 编码）。
+    :param key: 与加密时相同的 AES 密钥。
+    :return: 解密后的原始 bytes。
+    :raises ValueError: 字典缺少必要字段或密钥非法时抛出。
+    :raises cryptography.exceptions.InvalidTag: 密文被篡改或密钥不匹配时抛出。
+    """
+    _validate_key(key)
+    if "nonce" not in cipher_payload or "ciphertext" not in cipher_payload:
+        raise ValueError("cipher_payload 缺少 'nonce' 或 'ciphertext' 字段。")
+
+    nonce = base64.b64decode(cipher_payload["nonce"])
+    ct = base64.b64decode(cipher_payload["ciphertext"])
+
+    aesgcm = AESGCM(key)
+    return aesgcm.decrypt(nonce, ct, None)
+
+
 def _validate_key(key: bytes) -> None:
     """内部辅助：校验 AES 密钥长度是否合法。"""
     if not isinstance(key, bytes) or len(key) not in (16, 24, 32):

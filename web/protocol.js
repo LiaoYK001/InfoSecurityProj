@@ -14,12 +14,16 @@ export const MSG_ACK          = "ack";
 export const MSG_ERROR        = "error";
 export const MSG_HEARTBEAT    = "heartbeat";
 export const MSG_USER_LIST    = "user_list";
+export const MSG_FILE_TRANSFER = "file_transfer";
+export const MSG_FILE_CHUNK    = "file_chunk";
 
 /** 需要 receiver_id 的消息类型 */
 const REQUIRES_RECEIVER = new Set([
     MSG_PUBLIC_KEY,
     MSG_CHAT_MESSAGE,
     MSG_ACK,
+    MSG_FILE_TRANSFER,
+    MSG_FILE_CHUNK,
 ]);
 
 // ── 内部工具 ──────────────────────────────────────────────
@@ -84,6 +88,37 @@ export function makeHeartbeatMessage(senderId) {
 export function makeUserListMessage(users) {
     return buildEnvelope(MSG_USER_LIST, "server", "", {
         users,
+    });
+}
+
+export function makeFileTransferMessage(
+    senderId, receiverId, encrypted, filename, filesize, mimeType,
+) {
+    return buildEnvelope(MSG_FILE_TRANSFER, senderId, receiverId, {
+        wrapped_key: encrypted.wrapped_key,
+        nonce: encrypted.nonce,
+        ciphertext: encrypted.ciphertext,
+        filename,
+        filesize,
+        mime_type: mimeType,
+    });
+}
+
+export function makeFileChunkMessage(
+    senderId, receiverId, encrypted,
+    transferId, chunkIndex, totalChunks,
+    filename, filesize, mimeType,
+) {
+    return buildEnvelope(MSG_FILE_CHUNK, senderId, receiverId, {
+        wrapped_key: encrypted.wrapped_key,
+        nonce: encrypted.nonce,
+        ciphertext: encrypted.ciphertext,
+        transfer_id: transferId,
+        chunk_index: chunkIndex,
+        total_chunks: totalChunks,
+        filename,
+        filesize,
+        mime_type: mimeType,
     });
 }
 

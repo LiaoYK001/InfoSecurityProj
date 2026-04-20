@@ -20,15 +20,35 @@
 
 from __future__ import annotations
 
+import io
+import mimetypes
+import os
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from datetime import datetime
+
+try:
+    from PIL import Image, ImageTk
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
 
 import chat_client
 import session_manager as sm
 
 # 轮询间隔（毫秒）
 _POLL_INTERVAL_MS = 100
+
+# 文件大小限制
+FILE_SIZE_LIMIT = 50 * 1024 * 1024    # 50 MB
+SMALL_FILE_LIMIT = 5 * 1024 * 1024    # 5 MB
+
+# 图片 MIME 类型集合
+IMAGE_MIMES = {"image/png", "image/jpeg", "image/gif", "image/bmp", "image/webp"}
+
+# 缩略图最大尺寸
+THUMBNAIL_MAX = (300, 300)
 
 
 class DesktopChatApp(tk.Tk):
@@ -44,6 +64,10 @@ class DesktopChatApp(tk.Tk):
         self._session = sm.SessionManager()
         self._client = chat_client.ChatClient()
         self._current_peer: str = ""  # 当前聊天对象
+
+        # 文件传输状态
+        self._chunk_buffers: dict[str, dict] = {}
+        self._image_refs: list = []  # 保持图片引用防止 GC
 
         self._build_layout()
         self._poll_network_events()
@@ -154,6 +178,8 @@ class DesktopChatApp(tk.Tk):
         self._msg_entry = ttk.Entry(input_frame, textvariable=self._msg_var)
         self._msg_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._msg_entry.bind("<Return>", lambda _: self._send_message())
+        self._btn_file = ttk.Button(input_frame, text="📎", command=self._send_file, width=3)
+        self._btn_file.pack(side=tk.RIGHT, padx=(4, 0))
         ttk.Button(input_frame, text="发送", command=self._send_message).pack(side=tk.RIGHT, padx=(4, 0))
 
     def _build_crypto_console(self, parent: ttk.LabelFrame) -> None:
@@ -366,6 +392,69 @@ class DesktopChatApp(tk.Tk):
             self._append_crypto_log(f"[错误] 加密/发送失败: {e}", "log_error")
 
     # ================================================================
+    #  文件发送
+    # ================================================================
+
+    def _send_file(self) -> None:
+        """选择文件并加密发送。"""
+        if not self._client.connected:
+            messagebox.showwarning("提示", "尚未连接到服务端。")
+            return
+        if not self._current_peer:
+            messagebox.showwarning("提示", "请先选择一个联系人。")
+            return
+        if not self._session.has_peer_public_key(self._current_peer):
+            messagebox.showwarning("提示", f"尚未获取 {self._current_peer} 的公钥，无法加密。")
+            return
+
+        filepath = filedialog.askopenfilename(
+            title="选择要发送的文件",
+            filetypes=[
+                ("图片文件", "*.png *.jpg *.jpeg *.gif *.bmp *.webp"),
+                ("所有文件", "*.*"),
+            ],
+        )
+        if not filepath:
+            return
+
+        filesize = os.path.getsize(filepath)
+        filename = os.path.basename(filepath)
+        mime_type, _ = mimetypes.guess_type(filename)
+        mime_type = mime_type or "application/octet-stream"
+
+        if filesize > FILE_SIZE_LIMIT:
+            messagebox.showwarning("提示", f"文件过大: {filesize / 1024 / 1024:.1f} MB，上限 50 MB")
+            return
+
+        with open(filepath, "rb") as f:
+            file_bytes = f.read()
+
+        peer_id = self._current_peer
+        self._append_crypto_log(
+            f"[加密] 开始加密文件: {filename} ({self._format_size(filesize)})", "log_encrypt")
+
+        try:
+            if filesize <= SMALL_FILE_LIMIT:
+                encrypted = self._session.encrypt_file_for_peer(peer_id, file_bytes)
+                self._client.send_file_message(
+                    peer_id, encrypted, filename, filesize, mime_type,
+                )
+                self._append_crypto_log(f"[发送] 已发送文件: {filename}", "log_send")
+            else:
+                encrypt_fn = lambda chunk: self._session.encrypt_file_for_peer(peer_id, chunk)
+                self._client.send_file_chunks(
+                    peer_id, file_bytes, encrypt_fn, filename, filesize, mime_type,
+                )
+                total = (filesize + chat_client.FILE_CHUNK_SIZE - 1) // chat_client.FILE_CHUNK_SIZE
+                self._append_crypto_log(
+                    f"[发送] 已分块发送文件: {filename} ({total} 块)", "log_send")
+
+            self._append_file_message("me", filename, filesize, mime_type, file_bytes)
+        except Exception as e:
+            messagebox.showerror("发送失败", str(e))
+            self._append_crypto_log(f"[错误] 文件加密/发送失败: {e}", "log_error")
+
+    # ================================================================
     #  网络事件轮询
     # ================================================================
 
@@ -417,6 +506,12 @@ class DesktopChatApp(tk.Tk):
 
         elif evt_type == chat_client.EVT_PUBLIC_KEY:
             self._handle_incoming_public_key(event)
+
+        elif evt_type == chat_client.EVT_FILE_TRANSFER:
+            self._handle_incoming_file(event)
+
+        elif evt_type == chat_client.EVT_FILE_CHUNK:
+            self._handle_incoming_file_chunk(event)
 
         elif evt_type == chat_client.EVT_ERROR:
             err = event.get("message", "未知错误")
@@ -515,6 +610,144 @@ class DesktopChatApp(tk.Tk):
             except Exception as e:
                 self._append_crypto_log(
                     f"[警告] 导入 {sender_id} 公钥失败: {e}", "log_warn")
+
+    # ================================================================
+    #  文件接收处理
+    # ================================================================
+
+    def _handle_incoming_file(self, event: dict) -> None:
+        """处理收到的小文件整体传输消息。"""
+        data = event.get("data", {})
+        sender_id = str(data.get("sender_id", "?"))
+        payload = data.get("payload", {})
+        if not isinstance(payload, dict):
+            return
+
+        filename = str(payload.get("filename", "unnamed"))
+        filesize = int(payload.get("filesize", 0))
+        mime_type = str(payload.get("mime_type", "application/octet-stream"))
+
+        self._append_crypto_log(f"[接收] 收到来自 {sender_id} 的文件: {filename}", "log_recv")
+
+        try:
+            result = self._session.decrypt_file_from_message(payload)
+            file_bytes = result["file_bytes"]
+            self._append_crypto_log(
+                f"[解密] 文件解密成功: {self._format_size(len(file_bytes))}", "log_decrypt")
+            self._append_file_message("peer", filename, filesize, mime_type, file_bytes, sender_id)
+        except Exception as e:
+            self._append_crypto_log(f"[错误] 文件解密失败: {e}", "log_error")
+            self._append_chat_message(
+                "system", f"[文件解密失败] 来自 {sender_id} 的 {filename}: {e}")
+
+    def _handle_incoming_file_chunk(self, event: dict) -> None:
+        """处理分块文件的单个块。"""
+        data = event.get("data", {})
+        sender_id = str(data.get("sender_id", "?"))
+        payload = data.get("payload", {})
+        if not isinstance(payload, dict):
+            return
+
+        transfer_id = str(payload.get("transfer_id", ""))
+        chunk_index = int(payload.get("chunk_index", 0))
+        total_chunks = int(payload.get("total_chunks", 1))
+        filename = str(payload.get("filename", "unnamed"))
+        filesize = int(payload.get("filesize", 0))
+        mime_type = str(payload.get("mime_type", "application/octet-stream"))
+
+        try:
+            result = self._session.decrypt_file_from_message(payload)
+            chunk_bytes = result["file_bytes"]
+        except Exception as e:
+            self._append_crypto_log(
+                f"[错误] 文件块 {chunk_index + 1}/{total_chunks} 解密失败: {e}", "log_error")
+            return
+
+        if transfer_id not in self._chunk_buffers:
+            self._chunk_buffers[transfer_id] = {
+                "chunks": {}, "total": total_chunks,
+                "filename": filename, "filesize": filesize,
+                "mime_type": mime_type, "sender_id": sender_id,
+            }
+            self._append_crypto_log(
+                f"[接收] 开始接收分块文件: {filename} ({total_chunks} 块)", "log_recv")
+
+        buf = self._chunk_buffers[transfer_id]
+        buf["chunks"][chunk_index] = chunk_bytes
+        self._append_crypto_log(f"[接收] 收到块 {chunk_index + 1}/{total_chunks}", "log_recv")
+
+        if len(buf["chunks"]) == total_chunks:
+            file_bytes = b"".join(buf["chunks"][i] for i in range(total_chunks))
+            self._append_crypto_log(
+                f"[解密] 文件拼装完成: {filename} ({self._format_size(len(file_bytes))})",
+                "log_decrypt")
+            self._append_file_message(
+                "peer", filename, filesize, mime_type, file_bytes, sender_id)
+            del self._chunk_buffers[transfer_id]
+
+    # ================================================================
+    #  文件/图片渲染
+    # ================================================================
+
+    def _append_file_message(self, role: str, filename: str, filesize: int,
+                              mime_type: str, file_bytes: bytes,
+                              sender_id: str = "") -> None:
+        """在聊天区显示文件消息，图片自动预览。"""
+        tag = "me" if role == "me" else "peer"
+        prefix = "我" if role == "me" else (sender_id or self._current_peer or "对方")
+        now = datetime.now().strftime("%H:%M:%S")
+        size_str = self._format_size(filesize)
+
+        self._chat_display.config(state=tk.NORMAL)
+        self._chat_display.insert(tk.END, f"[{now}] {prefix}: ", tag)
+        self._chat_display.insert(tk.END, f"📎 {filename} ({size_str})\n", tag)
+
+        # 图片预览
+        if mime_type in IMAGE_MIMES and _HAS_PIL:
+            try:
+                img = Image.open(io.BytesIO(file_bytes))
+                img.thumbnail(THUMBNAIL_MAX, Image.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+                self._image_refs.append(photo)
+                self._chat_display.image_create(tk.END, image=photo)
+                self._chat_display.insert(tk.END, "\n")
+            except Exception:
+                self._chat_display.insert(tk.END, "[图片预览失败]\n", "system")
+        elif mime_type in IMAGE_MIMES:
+            self._chat_display.insert(tk.END, "[需安装 Pillow 才能预览图片]\n", "system")
+
+        # 保存链接
+        save_tag = f"save_{id(file_bytes)}_{time.time_ns()}"
+        self._chat_display.tag_config(save_tag, foreground="#4fc3f7", underline=True)
+        self._chat_display.tag_bind(
+            save_tag, "<Button-1>",
+            lambda e, fb=file_bytes, fn=filename: self._save_received_file(fb, fn))
+        self._chat_display.insert(tk.END, "[点击保存文件]", save_tag)
+        self._chat_display.insert(tk.END, "\n\n")
+
+        self._chat_display.see(tk.END)
+        self._chat_display.config(state=tk.DISABLED)
+
+    def _save_received_file(self, file_bytes: bytes, default_name: str) -> None:
+        """弹出保存对话框，将解密的文件保存到本地。"""
+        filepath = filedialog.asksaveasfilename(
+            initialfile=default_name,
+            title="保存文件",
+        )
+        if filepath:
+            with open(filepath, "wb") as f:
+                f.write(file_bytes)
+            self._append_crypto_log(f"[接收] 文件已保存: {filepath}", "log_recv")
+
+    @staticmethod
+    def _format_size(size: int) -> str:
+        """格式化文件大小。"""
+        if size < 1024:
+            return f"{size} B"
+        elif size < 1024 * 1024:
+            return f"{size / 1024:.1f} KB"
+        else:
+            return f"{size / 1024 / 1024:.1f} MB"
 
     # ================================================================
     #  UI 辅助

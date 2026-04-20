@@ -59,8 +59,17 @@ EVT_ACK = "ack"
 EVT_ERROR = "error"
 """错误通知。事件字典额外包含 "message" 键。"""
 
+EVT_FILE_TRANSFER = "file_transfer"
+"""收到小文件整体传输。事件字典额外包含 "data" 键。"""
+
+EVT_FILE_CHUNK = "file_chunk"
+"""收到大文件分块。事件字典额外包含 "data" 键。"""
+
 # 心跳发送间隔（秒）
 HEARTBEAT_INTERVAL = 30
+
+# 文件分块大小（字节）
+FILE_CHUNK_SIZE = 1 * 1024 * 1024  # 1 MB
 
 # 事件队列最大长度，防止内存泄漏
 _MAX_EVENT_QUEUE_SIZE = 1000
@@ -153,6 +162,96 @@ class ChatClient:
         raw = chat_protocol.make_public_key_message(self._user_id, receiver_id, public_key_pem)
         self._enqueue_send(raw)
 
+    def send_file_message(
+        self, receiver_id: str, encrypted_payload: dict[str, object],
+        filename: str, filesize: int, mime_type: str,
+    ) -> None:
+        """
+        发送小文件（≤ 5 MB，单条消息）。
+
+        :param encrypted_payload: message_crypto.encrypt_file_data 的输出。
+        :param filename: 原始文件名。
+        :param filesize: 原始文件大小（字节）。
+        :param mime_type: MIME 类型。
+        """
+        raw = chat_protocol.make_file_transfer_message(
+            self._user_id, receiver_id, encrypted_payload,
+            filename, filesize, mime_type,
+        )
+        self._enqueue_send(raw)
+
+    def send_file_chunks(
+        self, receiver_id: str, file_bytes: bytes,
+        encrypt_func,
+        filename: str, filesize: int, mime_type: str,
+    ) -> None:
+        """
+        发送大文件（> 5 MB，分块）。每块独立加密后逐条发送。
+
+        :param encrypt_func: 加密单块的回调 Callable[[bytes], dict]。
+        :param filename: 原始文件名。
+        :param filesize: 原始文件大小（字节）。
+        :param mime_type: MIME 类型。
+        """
+        import uuid
+        transfer_id = str(uuid.uuid4())
+        total_chunks = (len(file_bytes) + FILE_CHUNK_SIZE - 1) // FILE_CHUNK_SIZE
+
+        for i in range(total_chunks):
+            chunk = file_bytes[i * FILE_CHUNK_SIZE : (i + 1) * FILE_CHUNK_SIZE]
+            encrypted = encrypt_func(chunk)
+            raw = chat_protocol.make_file_chunk_message(
+                self._user_id, receiver_id, encrypted,
+                transfer_id, i, total_chunks,
+                filename, filesize, mime_type,
+            )
+            self._enqueue_send(raw)
+
+    def send_file_message(
+        self, receiver_id: str, encrypted_payload: dict[str, object],
+        filename: str, filesize: int, mime_type: str,
+    ) -> None:
+        """
+        发送小文件（≤ 5 MB，单条消息）。
+
+        :param encrypted_payload: message_crypto.encrypt_file_data 的输出。
+        :param filename: 原始文件名。
+        :param filesize: 原始文件大小（字节）。
+        :param mime_type: MIME 类型。
+        """
+        raw = chat_protocol.make_file_transfer_message(
+            self._user_id, receiver_id, encrypted_payload,
+            filename, filesize, mime_type,
+        )
+        self._enqueue_send(raw)
+
+    def send_file_chunks(
+        self, receiver_id: str, file_bytes: bytes,
+        encrypt_func,
+        filename: str, filesize: int, mime_type: str,
+    ) -> None:
+        """
+        发送大文件（> 5 MB，分块）。每块独立加密后逐条发送。
+
+        :param encrypt_func: 加密单块的回调 Callable[[bytes], dict]。
+        :param filename: 原始文件名。
+        :param filesize: 原始文件大小（字节）。
+        :param mime_type: MIME 类型。
+        """
+        import uuid
+        transfer_id = str(uuid.uuid4())
+        total_chunks = (len(file_bytes) + FILE_CHUNK_SIZE - 1) // FILE_CHUNK_SIZE
+
+        for i in range(total_chunks):
+            chunk = file_bytes[i * FILE_CHUNK_SIZE : (i + 1) * FILE_CHUNK_SIZE]
+            encrypted = encrypt_func(chunk)
+            raw = chat_protocol.make_file_chunk_message(
+                self._user_id, receiver_id, encrypted,
+                transfer_id, i, total_chunks,
+                filename, filesize, mime_type,
+            )
+            self._enqueue_send(raw)
+
     def send_heartbeat(self) -> None:
         """手动发送一次心跳包（通常由自动心跳任务处理，无需手动调用）。"""
         if self._connected and self._user_id:
@@ -241,7 +340,13 @@ class ChatClient:
                 elif msg_type == chat_protocol.MSG_PUBLIC_KEY:
                     self._put_event({"event": EVT_PUBLIC_KEY, "data": msg})
                 elif msg_type == chat_protocol.MSG_USER_LIST:
-                    self._put_event({"event": EVT_USER_LIST, "data": msg})
+                    self._put_event({"event": EVT_USER_LIST, "data": msg})                elif msg_type == chat_protocol.MSG_FILE_TRANSFER:
+                    self._put_event({"event": EVT_FILE_TRANSFER, "data": msg})
+                elif msg_type == chat_protocol.MSG_FILE_CHUNK:
+                    self._put_event({"event": EVT_FILE_CHUNK, "data": msg})                elif msg_type == chat_protocol.MSG_FILE_TRANSFER:
+                    self._put_event({"event": EVT_FILE_TRANSFER, "data": msg})
+                elif msg_type == chat_protocol.MSG_FILE_CHUNK:
+                    self._put_event({"event": EVT_FILE_CHUNK, "data": msg})
                 elif msg_type == chat_protocol.MSG_ERROR:
                     payload = msg.get("payload", {})
                     err_msg = payload["message"] if isinstance(payload, dict) and "message" in payload else "未知错误"

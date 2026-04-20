@@ -118,3 +118,90 @@ def decrypt_chat_message(
             "nonce_length": len(nonce_b64),
         },
     }
+
+
+# -------------------- 文件数据混合加密 / 解密 --------------------
+
+def encrypt_file_data(
+    file_bytes: bytes,
+    peer_public_key: rsa.RSAPublicKey,
+    local_key_manager: rsa_core.RSAKeyManager | None = None,
+) -> dict[str, object]:
+    """
+    对文件二进制数据执行混合加密（AES-256-GCM + RSA-OAEP）。
+
+    流程与 encrypt_chat_message 相同，但操作原始字节而非文本字符串：
+      1. 生成 256 位一次性 AES 会话密钥。
+      2. 使用 AES-GCM 加密文件字节。
+      3. 使用对方的 RSA 公钥加密 AES 会话密钥（wrapped_key）。
+
+    :param file_bytes: 待加密的文件原始字节。
+    :param peer_public_key: 接收方的 RSA 公钥对象。
+    :param local_key_manager: 可选，用于获取本地公钥指纹写入 debug。
+    :return: 包含 wrapped_key / nonce / ciphertext / debug 的字典。
+    """
+    if not isinstance(file_bytes, bytes):
+        raise TypeError("file_bytes 必须是 bytes 类型")
+
+    session_key = aes_core.generate_aes_key(256)
+    aes_result = aes_core.encrypt_bytes(file_bytes, session_key)
+
+    wrapped_key_bytes = rsa_core.encrypt_bytes(session_key, peer_public_key)
+    wrapped_key_b64 = base64.b64encode(wrapped_key_bytes).decode("ascii")
+
+    peer_fp = rsa_core.get_public_key_fingerprint(peer_public_key)
+    sender_fp = ""
+    if local_key_manager and local_key_manager.has_public_key():
+        sender_fp = local_key_manager.get_local_public_key_fingerprint()
+
+    return {
+        "wrapped_key": wrapped_key_b64,
+        "nonce": aes_result["nonce"],
+        "ciphertext": aes_result["ciphertext"],
+        "debug": {
+            "plaintext_length": len(file_bytes),
+            "ciphertext_length": len(aes_result["ciphertext"]),
+            "wrapped_key_length": len(wrapped_key_b64),
+            "session_key_bits": 256,
+            "peer_key_fingerprint": peer_fp,
+            "sender_key_fingerprint": sender_fp,
+        },
+    }
+
+
+def decrypt_file_data(
+    message_payload: dict[str, object],
+    local_private_key: rsa.RSAPrivateKey,
+) -> dict[str, object]:
+    """
+    对接收到的混合加密文件数据执行解密。
+
+    流程与 decrypt_chat_message 相同，但返回原始字节而非文本字符串。
+
+    :param message_payload: 包含 wrapped_key / nonce / ciphertext 的字典。
+    :param local_private_key: 接收方的 RSA 私钥对象。
+    :return: 包含 file_bytes(bytes) 和 debug 信息的字典。
+    """
+    for field in ("wrapped_key", "nonce", "ciphertext"):
+        if field not in message_payload:
+            raise ValueError(f"消息缺少必要字段: {field}")
+
+    wrapped_key_b64 = str(message_payload["wrapped_key"])
+    nonce_b64 = str(message_payload["nonce"])
+    ciphertext_b64 = str(message_payload["ciphertext"])
+
+    wrapped_key_bytes = base64.b64decode(wrapped_key_b64)
+    session_key = rsa_core.decrypt_bytes(wrapped_key_bytes, local_private_key)
+
+    cipher_payload = {"nonce": nonce_b64, "ciphertext": ciphertext_b64}
+    file_bytes = aes_core.decrypt_bytes(cipher_payload, session_key)
+
+    return {
+        "file_bytes": file_bytes,
+        "debug": {
+            "decrypted_length": len(file_bytes),
+            "ciphertext_length": len(ciphertext_b64),
+            "wrapped_key_length": len(wrapped_key_b64),
+            "session_key_bits": 256,
+        },
+    }
