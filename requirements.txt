@@ -4,6 +4,8 @@ cffi==2.0.0 ; platform_python_implementation != 'PyPy'
     # via cryptography
 cryptography==46.0.7
     # via infosecurityproj
+pillow==12.2.0
+    # via infosecurityproj
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
 typing-extensions==4.15.0 ; python_full_version < '3.11'

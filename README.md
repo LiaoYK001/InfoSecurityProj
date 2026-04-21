@@ -167,6 +167,8 @@ python -m PyInstaller SecureChatServer.spec
 
 客户端和服务端都使用 spec 固化依赖；RSA 工具仍使用普通命令构建即可。
 
+其中客户端的 `SecureChat.spec` 会显式收集 `websockets` 和 `Pillow`，保证图片消息缩略图预览可用。
+
 只构建聊天客户端和服务端时可执行：
 
 ```powershell

@@ -14,7 +14,13 @@ else {
 
 Write-Host "Using Python: $python"
 
-& $python -c "import websockets, PyInstaller; print('Environment OK')" | Out-Null
+function Assert-PythonModules {
+    param([string[]]$Modules)
+
+    $moduleList = $Modules -join ", "
+    $importList = ($Modules | ForEach-Object { "'$_'" }) -join ", "
+    & $python -c "import importlib; [importlib.import_module(name) for name in [$importList]]; print('Environment OK')" | Out-Null
+}
 
 function Test-FileLocked {
     param([string]$Path)
@@ -66,6 +72,7 @@ if (Test-Path "build") {
 foreach ($target in $selectedTargets) {
     switch ($target) {
         "client" {
+            Assert-PythonModules @("websockets", "PIL", "PyInstaller")
             $buildOk = Invoke-BuildTarget "SecureChat" "dist/SecureChat.exe" {
                 & $python -m PyInstaller SecureChat.spec -y
             }
@@ -74,6 +81,7 @@ foreach ($target in $selectedTargets) {
             }
         }
         "server" {
+            Assert-PythonModules @("websockets", "PyInstaller")
             $buildOk = Invoke-BuildTarget "SecureChatServer" "dist/SecureChatServer.exe" {
                 & $python -m PyInstaller SecureChatServer.spec -y
             }
@@ -82,6 +90,7 @@ foreach ($target in $selectedTargets) {
             }
         }
         "rsa" {
+            Assert-PythonModules @("PyInstaller")
             $buildOk = Invoke-BuildTarget "RSA_Encrypt_Decrypt_Tool" "dist/RSA_Encrypt_Decrypt_Tool.exe" {
                 & $python -m PyInstaller --onefile --windowed --name RSA_Encrypt_Decrypt_Tool InfoSecurWork_GUI.py -y
             }

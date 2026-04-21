@@ -11,43 +11,43 @@
 
 | #   | 截图内容                                  | 保存为                                           | 状态 |
 | --- | ----------------------------------------- | ------------------------------------------------ | ---- |
-| 1   | 服务端启动日志（`python chat_server.py`） | `document/screenshots/01_server_start.png`       | ☐    |
-| 2   | 客户端 A (Alice) 密钥生成后界面（含指纹） | `document/screenshots/02_alice_keygen.png`       | ☐    |
-| 3   | Alice 连接成功（状态栏显示"已连接"）      | `document/screenshots/03_alice_connected.png`    | ☐    |
-| 4   | Bob 连接后联系人列表（显示 Alice）        | `document/screenshots/04_bob_contact_list.png`   | ☐    |
-| 5   | Alice 发送消息后聊天界面                  | `document/screenshots/05_alice_send_msg.png`     | ☐    |
-| 6   | Alice 端 Crypto Console 加密日志          | `document/screenshots/06_alice_crypto_log.png`   | ☐    |
-| 7   | Bob 收到消息后聊天界面                    | `document/screenshots/07_bob_recv_msg.png`       | ☐    |
-| 8   | Bob 端 Crypto Console 解密日志            | `document/screenshots/08_bob_crypto_log.png`     | ☐    |
-| 9   | 服务端日志（只有类型和长度，无明文）      | `document/screenshots/09_server_log_noclear.png` | ☐    |
+| 1   | 服务端启动日志（`python chat_server.py`） | `document/screenshots/01_server_start.png`       | ☑    |
+| 2   | 客户端 A (Alice) 密钥生成后界面（含指纹） | `document/screenshots/02_alice_keygen.png`       | ☑    |
+| 3   | Alice 连接成功（状态栏显示"已连接"）      | `document/screenshots/03_alice_connected.png`    | ☑    |
+| 4   | Bob 连接后联系人列表（显示 Alice）        | `document/screenshots/04_bob_contact_list.png`   | ☑    |
+| 5   | Alice 发送消息后聊天界面                  | `document/screenshots/05_alice_send_msg.png`     | ☑    |
+| 6   | Alice 端 Crypto Console 加密日志          | `document/screenshots/06_alice_crypto_log.png`   | ☑    |
+| 7   | Bob 收到消息后聊天界面                    | `document/screenshots/07_bob_recv_msg.png`       | ☑    |
+| 8   | Bob 端 Crypto Console 解密日志            | `document/screenshots/08_bob_crypto_log.png`     | ☑    |
+| 9   | 服务端日志（只有类型和长度，无明文）      | `document/screenshots/09_server_log_noclear.png` | ☑    |
 
 ### 文件传输截图（新增功能）
 
 | #   | 截图内容                                  | 保存为                                  | 状态 |
 | --- | ----------------------------------------- | --------------------------------------- | ---- |
-| 10  | Alice 发送图片文件后界面（含缩略图预览）  | `document/screenshots/10_file_send.png` | ☐    |
-| 11  | Bob 收到图片后界面（含缩略图 + 保存链接） | `document/screenshots/11_file_recv.png` | ☐    |
+| 10  | Alice 发送图片文件后界面（含缩略图预览）  | `document/screenshots/10_file_send.png` | ☑    |
+| 11  | Bob 收到图片后界面（含缩略图 + 保存链接） | `document/screenshots/11_file_recv.png` | ☑    |
 
 ### Wireshark 抓包截图
 
 | #   | 截图内容                                      | 保存为                                          | 状态 |
 | --- | --------------------------------------------- | ----------------------------------------------- | ---- |
-| 12  | 捕获列表概览（过滤 `tcp.port == 8765`）       | `document/screenshots/12_wireshark_list.png`    | ☐    |
-| 13  | 展开 WebSocket 帧 payload（显示 Base64 密文） | `document/screenshots/13_wireshark_payload.png` | ☐    |
+| 12  | 捕获列表概览（过滤 `tcp.port == 8765`）       | `document/screenshots/12_wireshark_list.png`    | ☑    |
+| 13  | 展开 WebSocket 帧 payload（显示 Base64 密文） | `document/screenshots/13_wireshark_payload.png` | ☑    |
 
 ### Web 端截图
 
 | #   | 截图内容                            | 保存为                                 | 状态 |
 | --- | ----------------------------------- | -------------------------------------- | ---- |
-| 14  | Web 端双向聊天界面 + Crypto Console | `document/screenshots/14_web_chat.png` | ☐    |
-| 15  | Web 端文件传输/图片预览             | `document/screenshots/15_web_file.png` | ☐    |
+| 14  | Web 端双向聊天界面 + Crypto Console | `document/screenshots/14_web_chat.png` | ☑    |
+| 15  | Web 端文件传输/图片预览             | `document/screenshots/15_web_file.png` | ☑    |
 
 ### 异常场景截图（可选加分）
 
 | #   | 截图内容                   | 保存为                                       | 状态 |
 | --- | -------------------------- | -------------------------------------------- | ---- |
-| 16  | 未生成密钥时发送消息的提示 | `document/screenshots/16_no_key_warning.png` | ☐    |
-| 17  | 一方断连后联系人列表变化   | `document/screenshots/17_disconnect.png`     | ☐    |
+| 16  | 未生成密钥时发送消息的提示 | `document/screenshots/16_no_key_warning.png` | ☑    |
+| 17  | 一方断连后联系人列表变化   | `document/screenshots/17_disconnect.png`     | ☑    |
 
 ---
 

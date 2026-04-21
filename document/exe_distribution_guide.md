@@ -25,7 +25,7 @@ python -m PyInstaller SecureChat.spec
 
 - `--onefile`：打包为单个 exe
 - `--windowed`：隐藏控制台窗口（GUI 应用）
-- `SecureChat.spec`：已显式收集本地模块和 `websockets` 包，避免运行时报 `ModuleNotFoundError`
+- `SecureChat.spec`：已显式收集本地模块、`websockets` 和 `Pillow`，避免运行时报缺包，且支持图片缩略图预览
 - 产物：`dist/SecureChat.exe`
 
 > ⚠️ **请在安装了项目依赖的 Python 环境中执行**。推荐先激活虚拟环境，再运行 `python -m PyInstaller SecureChat.spec`。
