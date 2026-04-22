@@ -117,6 +117,8 @@ python -m http.server 8080
 
 Web 端可与桌面端互通：桌面端用户和 Web 端用户之间可以正常收发加密消息。
 
+本地调试时可以继续使用 `http://localhost:8080` 和 `ws://127.0.0.1:8765`。如果是远程浏览器访问，就必须切换成 HTTPS/WSS：浏览器只允许在安全上下文里使用 Web Crypto API，而 `ws://` 也会在 HTTPS 页面里被当作 mixed content 拦截。`localhost` 和 `127.0.0.1` 之所以能例外，是因为浏览器把它们视为本机调试地址。
+
 > 详细说明参见 `web/README.md`。
 
 ### 6. Ubuntu 服务器部署（多端远程演示）
@@ -130,6 +132,8 @@ chmod +x deploy.sh
 ```
 
 各设备浏览器访问 `https://<服务器IP>/` 即可使用。
+
+> 说明：远程 IP 不是浏览器的本机例外，所以必须使用 HTTPS 和 WSS。`http://localhost` / `127.0.0.1` 能直接用，是浏览器对本机调试地址的特殊放行。
 
 > 完整部署指南参见 `document/ubuntu_deploy_guide.md`。
 
@@ -186,6 +190,10 @@ A: 执行 `pip install -r requirements.txt` 安装全部依赖。
 **Q: 连接服务端失败**
 
 A: 确认服务端已启动，且客户端地址栏与服务端 `--host`/`--port` 一致。默认地址为 `ws://127.0.0.1:8765`。
+
+**Q: 为什么浏览器里必须用 HTTPS/WSS？可以关闭吗？**
+
+A: 浏览器把 Web Crypto API 的 `crypto.subtle` 限制在安全上下文里，HTTPS 是标准安全上下文，`localhost` 和 `127.0.0.1` 是本机例外。`ws://` 是明文 WebSocket，HTTPS 页面再连 `ws://` 会被浏览器当作 mixed content 拦截。这个限制不能在普通网页里关闭；正式部署请使用 HTTPS/WSS，本机开发可继续用 localhost / 127.0.0.1。
 
 **Q: 消息发送后对方看不到**
 
